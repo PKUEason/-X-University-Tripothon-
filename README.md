@@ -25,11 +25,14 @@ python run.py                                          # 默认 127.0.0.1:8000�
 
 ## ⚠️ API 安全红线（重要）
 
-1. **`.env` 严禁提交**：它含真实 DeepSeek API key（付费额度）。本仓库 `.gitignore` 已忽略，
-   任何人不准 `git add -f .env` / 改 `.gitignore` 放行。
-2. **key 只存在于本地 `.env`**：协作者各自复制 `.env.example` 填写，或用私聊传递，不进 git。
-3. 后端内置三重防护（每日 LLM 预算 / 单 IP 限流 / 异常脱敏），超预算自动降级 Mock，演示不中断。
-4. 公网暴露（隧道/云主机）前：设置 `API_TOKEN` + 控制 `HOST`，详见 `ai-backend/README.md`「公网暴露前必读」。
+1. **`.env` 已随仓库共享**（含真实 DeepSeek key）：本仓库为**私有团队仓库**，clone 后开箱即用、
+   无需自备 key，直接 `python run.py` 即可测试对话。
+2. **严禁把这个仓库改为公开**；新增协作者要谨慎（能 clone 的人都能看到 key）。**比赛结束后
+   必须在 DeepSeek 平台吊销并轮换 key**（git 历史里的旧 key 无法真正删除）。
+3. **`.env` 的后续改动不会自动进 git**（`.gitignore` 仍忽略，需显式 `git add -f` 才更新）——
+   正常开发改本地 `.env` 不影响仓库。
+4. 后端内置三重防护（每日 LLM 预算 / 单 IP 限流 / 异常脱敏），超预算自动降级 Mock，演示不中断。
+5. 公网暴露（隧道/云主机）前：设置 `API_TOKEN` + 控制 `HOST`，详见 `ai-backend/README.md`「公网暴露前必读」。
 
 ## 协作方式
 
