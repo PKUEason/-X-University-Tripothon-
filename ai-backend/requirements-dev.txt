@@ -1,0 +1,4 @@
+-r requirements.txt
+
+# 测试：pytest 全量跑在 MOCK 模式下，不联网、不消耗 API 额度
+pytest>=8.0,<10.0

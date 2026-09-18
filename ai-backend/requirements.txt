@@ -1,0 +1,17 @@
+# X University AI Backend — 直接依赖
+#
+# 为什么写上界：曾经只写 `openai>=1.50`，结果被解析到 3.14.1（跨两个大版本）。
+# 上界不锁死小版本（保留安全更新），但挡住跨大版本的静默漂移。
+# 需要「完全可复现」的环境（路演当天、换机器），请改用 requirements.lock.txt。
+
+fastapi>=0.115,<1.0
+uvicorn>=0.30,<1.0
+sse-starlette>=2.1,<4.0
+openai>=1.50,<4.0
+pydantic>=2.9,<3.0
+python-dotenv>=1.0,<2.0
+
+# HTTP 客户端：全项目统一用 httpx2。
+# openai 3.x 与 Starlette 的 TestClient 都已迁到 httpx2；
+# 不要再装 httpx（0.x），否则 site-packages 里会同时出现两套客户端。
+httpx2>=2.7,<3.0

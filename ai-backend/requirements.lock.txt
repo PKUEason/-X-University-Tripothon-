@@ -1,0 +1,41 @@
+# X University AI Backend — 完整环境快照（含测试依赖）
+#
+# 生成方式：在通过验证的环境里执行 `pip freeze --exclude-editable`
+# 验证基线：Python 3.14.7 / Windows，pytest 73 passed + 冒烟测试 17 passed
+#
+# 用途：路演当天、换机器、队友复现环境时使用，保证与已验证版本完全一致。
+#   python -m venv .venv
+#   .venv\Scripts\activate
+#   pip install -r requirements.lock.txt
+#
+# 日常开发用 requirements.txt（只约束直接依赖的上下界，便于收安全更新）；
+# 依赖有变更时，请重跑测试后再重新生成本文件。
+
+annotated-doc==0.0.5
+annotated-types==0.8.0
+anyio==4.15.1
+certifi==2026.7.22
+click==8.5.0
+colorama==0.4.6
+fastapi==0.141.1
+h11==0.16.0
+httpcore2==2.13.0
+httpx2==2.13.0
+idna==3.19
+iniconfig==2.3.0
+jiter==0.17.0
+openai==3.14.1
+packaging==26.3
+pluggy==1.6.0
+pydantic==2.13.5
+pydantic_core==2.46.5
+Pygments==2.21.0
+pytest==9.1.1
+python-dotenv==1.2.3
+sniffio==1.3.1
+sse-starlette==3.4.11
+starlette==1.6.0
+truststore==0.10.4
+typing-inspection==0.4.4
+typing_extensions==4.16.0
+uvicorn==0.53.0

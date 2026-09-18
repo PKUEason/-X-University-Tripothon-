@@ -1,0 +1,156 @@
+{
+  "title": "两周入门扩散模型：从数学直觉到图像生成 Demo",
+  "summary": "X Gate 确认目标后，在 Library 精读 DDPM 等经典论文，在 Professor Office 攻克反向扩散与引导原理，最终在 Lab 跑通并生成自己的图片作品。",
+  "estimated_duration": "2 周（每天约 3 小时）",
+  "stages": [
+    {
+      "id": "stage-1",
+      "name": "X Gate · 目标确认",
+      "space": "gate",
+      "objective": "确认基础与目标，建立两周冲刺契约",
+      "tasks": [
+        {
+          "id": "t-1-1",
+          "title": "基础自评与目标锁定",
+          "description": "确认 Python/PyTorch 基础与 GPU 环境，锁定最终成果：跑通扩散模型并生成一组自己的图片作品。",
+          "space": "gate",
+          "deliverable": "学习目标声明 + 环境清单",
+          "resources": [
+            {
+              "title": "PyTorch 官方安装指南",
+              "type": "tool",
+              "url": "https://pytorch.org/get-started/locally/"
+            }
+          ],
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "id": "stage-2",
+      "name": "Library · 扩散模型基础",
+      "space": "library",
+      "objective": "建立扩散模型的数学直觉，精读奠基论文",
+      "tasks": [
+        {
+          "id": "t-2-1",
+          "title": "补先修：概率与生成模型基础",
+          "description": "复习高斯分布、贝叶斯与 ELBO 的直觉，了解 VAE/GAN 与扩散模型的定位差异。",
+          "space": "library",
+          "deliverable": "一页纸先修知识笔记",
+          "resources": [
+            {
+              "title": "What are Diffusion Models?（Lilian Weng）",
+              "type": "article",
+              "url": "https://lilianweng.github.io/posts/2021-07-11-diffusion-models/"
+            }
+          ],
+          "status": "pending"
+        },
+        {
+          "id": "t-2-2",
+          "title": "精读 DDPM 论文",
+          "description": "精读《Denoising Diffusion Probabilistic Models》，理解前向加噪、训练目标与反向去噪采样，整理推导笔记。",
+          "space": "library",
+          "deliverable": "DDPM 精读笔记 + 公式推导",
+          "resources": [
+            {
+              "title": "Denoising Diffusion Probabilistic Models (Ho et al., 2020)",
+              "type": "paper",
+              "url": "https://arxiv.org/abs/2006.11239"
+            },
+            {
+              "title": "Score-Based Generative Modeling through SDEs (Song et al., 2021)",
+              "type": "paper",
+              "url": "https://arxiv.org/abs/2011.13456"
+            }
+          ],
+          "status": "pending"
+        },
+        {
+          "id": "t-2-3",
+          "title": "了解 Stable Diffusion 与潜空间扩散",
+          "description": "阅读 Stable Diffusion 论文与科普资料，理解 VAE 潜空间、文本编码器与 Classifier-Free Guidance 的作用。",
+          "space": "library",
+          "deliverable": "Stable Diffusion 架构图笔记",
+          "resources": [
+            {
+              "title": "High-Resolution Image Synthesis with Latent Diffusion Models",
+              "type": "paper",
+              "url": "https://arxiv.org/abs/2112.10752"
+            }
+          ],
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "id": "stage-3",
+      "name": "Professor Office · 攻克难点",
+      "space": "professor_office",
+      "objective": "与 AI Professor 研讨最难的两个原理并接受检验",
+      "tasks": [
+        {
+          "id": "t-3-1",
+          "title": "研讨：反向扩散为什么能去噪",
+          "description": "向 Professor 复述前向/反向过程，接受追问，彻底搞清噪声预测网络与采样链的关系。",
+          "space": "professor_office",
+          "deliverable": "反向扩散费曼式讲解录音/笔记",
+          "resources": [],
+          "status": "pending"
+        },
+        {
+          "id": "t-3-2",
+          "title": "研讨：Classifier-Free Guidance",
+          "description": "理解 CFG 如何用条件/无条件预测之差控制生成强度，并讨论 guidance scale 对画面的影响。",
+          "space": "professor_office",
+          "deliverable": "CFG 原理问答记录",
+          "resources": [],
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "id": "stage-4",
+      "name": "Research Lab · 做出图像生成 Demo",
+      "space": "lab",
+      "objective": "跑通工业级工具链，生成并打磨自己的作品",
+      "tasks": [
+        {
+          "id": "t-4-1",
+          "title": "跑通 diffusers 最小推理管线",
+          "description": "使用 HuggingFace diffusers 加载 Stable Diffusion，本地跑通文生图，记录不同 prompt 与参数的效果。",
+          "space": "lab",
+          "deliverable": "可运行的文生图 Notebook/脚本 + 首批生成图",
+          "resources": [
+            {
+              "title": "Diffusers 官方文档",
+              "type": "tool",
+              "url": "https://huggingface.co/docs/diffusers"
+            }
+          ],
+          "status": "pending"
+        },
+        {
+          "id": "t-4-2",
+          "title": "参数实验与个人作品",
+          "description": "系统实验 steps、guidance scale、negative prompt，确定一个主题，产出一组风格统一的个人作品。",
+          "space": "lab",
+          "deliverable": "参数实验记录 + 主题作品集（6-9 张）",
+          "resources": [],
+          "status": "pending"
+        },
+        {
+          "id": "t-4-3",
+          "title": "整理项目报告与展示",
+          "description": "把原理笔记、实验记录和作品整理为项目报告，录制 1 分钟生成过程演示，形成最终成果。",
+          "space": "lab",
+          "deliverable": "项目报告 + 演示视频",
+          "resources": [],
+          "status": "pending"
+        }
+      ]
+    }
+  ],
+  "final_outcome": "一个可运行的扩散模型文生图 Demo、一组个人图像作品，以及一份原理与实验兼备的项目报告"
+}
