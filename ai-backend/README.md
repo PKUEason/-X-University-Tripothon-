@@ -45,7 +45,7 @@ python scripts/smoke_test.py
   里会同时躺着两套客户端，排查问题时极易搞混（而且 `starlette.testclient` 检测到只有 `httpx` 时会发告警）。
 - **`requirements.txt` 写 `>=x,<y` 而不是 `==`**：上界只用来挡跨大版本的静默漂移。
   曾经只写 `openai>=1.50`，实际被解析成 `3.14.1`（跨两个大版本）。要完全可复现的环境（路演当天、换机器）
-  请用 `requirements.lock.txt`，它是「73 项测试 + 17 项冒烟全绿」的那套精确版本。
+  请用 `requirements.lock.txt`，它是「204 项 pytest + 17 项冒烟全绿」的那套精确版本。
 
 ## 2. 环境变量（.env）
 
@@ -64,6 +64,12 @@ python scripts/smoke_test.py
 | `API_TOKEN` | 可选鉴权。留空 = 不校验；设置后 `/api/*` 需带 `X-API-Token` 头 | 空（关闭） |
 | `LLM_DAILY_CALL_LIMIT` | 每日真实 LLM 调用上限，超出**自动降级 mock**（不中断服务）；`0` = 不限 | `300` |
 | `RATE_LIMIT_PER_MINUTE` | 单 IP 每分钟请求上限；`0` = 不限 | `120` |
+| `RAG_MODE` | 检索模式：`hybrid`（BM25+向量 RRF）/ `vector` / `bm25` | `hybrid` |
+| `EMBEDDING_PROVIDER` | Embedding 后端：`auto` / `api` / `fastembed` / `hash` / `none` | `auto` |
+| `EMBEDDING_BASE_URL` | OpenAI 兼容 embedding 端点（硅基流动 `https://api.siliconflow.cn/v1`） | 空 |
+| `EMBEDDING_API_KEY` | Embedding 服务的 key（**不复用** DeepSeek key） | 空 |
+| `EMBEDDING_MODEL` | API embedding 模型（硅基流动免费 `BAAI/bge-m3`） | `BAAI/bge-m3` |
+| `EMBEDDING_LOCAL_MODEL` | fastembed 本地模型 | `BAAI/bge-small-zh-v1.5` |
 
 > 演示建议：平时 `MOCK_MODE=false` 联调真实效果；路演当天若网络不稳，改 `MOCK_MODE=true`，走完全确定的黄金路径。
 
@@ -266,10 +272,13 @@ SSE 说明：响应为 `text/event-stream`，每条消息含 `event:` 与 `data:
 ```json
 {
   "documents": [{ "title": "...", "type": "paper", "url": "https://arxiv.org/…", "snippet": "……" }],
-  "engine": "curated-v1",
-  "notice": "Phase 1 精选语料；Phase 2 升级为向量 RAG + arXiv 实时检索"
+  "engine": "hybrid-v2(bm25+api:BAAI/bge-m3)",
+  "notice": "Hybrid RAG：BM25 + 向量 RRF 融合；MOCK 模式或零命中时回退 curated-v1"
 }
 ```
+engine 取值：`curated-v1`（MOCK/兜底）、`bm25-v1`（纯关键词 / 向量降级）、
+`vector-v2(<后端>)`、`hybrid-v2(bm25+<后端>)`；`<后端>` 如 `api:BAAI/bge-m3` /
+`fastembed:BAAI/bge-small-zh-v1.5` / `hash-deterministic-256`（未配置时的兜底，无语义）。
 
 ### 3.4 AI Professor（SSE 流式）
 
@@ -278,7 +287,12 @@ SSE 说明：响应为 `text/event-stream`，每条消息含 `event:` 与 `data:
 { "session_id": "...", "message": "请讲一下反向扩散过程",
   "stage_id": "stage-3", "task_id": "t-3-1" }
 ```
-事件序列：`token`（多次）→ 可选 `fallback`/`error` → `done`。Professor 自动携带路线图与当前任务上下文。
+事件序列：`token`（多次）→ `references`（相关资料来源）→ 可选 `fallback`/`error` → `done`。
+Professor 自动携带路线图、学生画像与 RAG 检索资料；答疑卡点写入 Memory。
+```json
+// references 事件 data
+{ "references": [{ "title": "DDPM 论文导读", "type": "paper", "url": "https://arxiv.org/…" }] }
+```
 
 ### 3.5 Research Lab
 
@@ -295,6 +309,33 @@ SSE 说明：响应为 `text/event-stream`，每条消息含 `event:` 与 `data:
   "tools": ["diffusers", "transformers"]
 }
 ```
+
+### 3.6 Memory（长期记忆）
+
+**GET `/memory?session_id=...&kind=&key=`** — 读取记忆（画像 / 进度卡点 / 笔记，含全局记忆）
+```json
+{ "memories": [{ "id": 1, "session_id": "…", "kind": "profile", "key": "goal",
+  "content": "两周入门扩散模型并跑通文生图 Demo", "created_at": "…", "updated_at": "…" }] }
+```
+**POST `/memory/remember`** — 写入一条记忆
+```json
+{ "session_id": "...", "kind": "note", "key": "my-note", "content": "……" }
+```
+
+### 3.7 Quest 编排（多 Agent，推荐对接方式）
+
+**GET `/quest/{session_id}`** — Quest 状态机快照
+```json
+{ "session_id": "…", "status": "library", "goal": "…",
+  "total_tasks": 10, "completed_tasks": ["t-1-1"], "project": null }
+```
+**POST `/quest/advance`**（SSE）— 推进一个阶段，`created/clarifying` 时需带 `message`：
+```json
+{ "session_id": "...", "message": "我有 PyTorch 基础，每天 3 小时，想跑通文生图" }
+```
+事件流包含被委托 Agent 的原有事件（`token`/`roadmap`/`references` 等），以及空间切换时的
+`quest` 事件（`{"status":"library","message":"…"}`）——前端直接用它驱动 3D 场景移动；
+Lab 阶段结束自动收到 `project` 事件（Project Card）。
 
 ## 4. 前端最小调用示例（SSE 用 fetch 读取）
 
@@ -323,7 +364,7 @@ while (true) {
 ```bash
 # 1. 单元 + 契约 + 降级（pytest，全量 MOCK 模式，无需启动服务）
 pip install -r requirements-dev.txt
-pytest                      # 139 项
+pytest                      # 204 项
 
 # 2. 端到端冒烟（需先 python run.py 起服务；会真实调用 DeepSeek）
 python scripts/smoke_test.py
@@ -338,7 +379,12 @@ python scripts/smoke_test.py
 | `tests/test_store.py` | SQLite 会话 / 消息 / 路线图 / 任务状态读写 |
 | `tests/test_api_contract.py` | 8 个端点的状态码、SSE 事件序列、响应结构 |
 | `tests/test_fallback.py` | 断网 / 超时 / 余额不足 / JSON 残缺时的降级路径（**演示保险，重点回归**） |
-| `tests/test_librarian.py` | Library 检索契约、Phase 2 的 RAG 开关行为 |
+| `tests/test_librarian.py` | Library 检索契约：mock→curated、真实→hybrid、零命中回退 |
+| `tests/test_rag.py` | BM25 分词（词表/2-gram/停用词）、标题加权、排序与 snippet |
+| `tests/test_vector_rag.py` | embedding 后端/工厂、向量缓存持久化、RRF 融合、hybrid 三模式与失败降级 |
+| `tests/test_memory.py` | 记忆 CRUD、全局记忆、画像提取、长对话摘要、卡点记录 |
+| `tests/test_professor_rag.py` | Professor references 事件、相关性、卡点入记忆 |
+| `tests/test_orchestrator.py` | Quest 状态机完整走查、Project Card 契约、SSE 端点 |
 | `tests/test_hardening.py` | CORS 收敛、API Token 开关、监听地址、lifespan 生命周期 |
 | `tests/test_guard.py` | 每日预算熔断（含并发不超支）、单 IP 限流、对外错误脱敏 |
 
@@ -364,14 +410,23 @@ XUniversity/
 │   ├── agents/
 │   │   ├── llm.py             # DeepSeek 封装（chat / stream_text / chat_json）
 │   │   ├── scholar.py         # Scholar：澄清 + 路线图（含 JSON 规范化/降级）
-│   │   ├── professor.py       # AI Professor 答疑
+│   │   ├── professor.py       # AI Professor 答疑（RAG 注入 + references）
 │   │   ├── lab_mentor.py      # Lab 实践指导
-│   │   └── librarian.py       # Library 检索（Phase 2 接 RAG）
+│   │   ├── librarian.py       # Library 检索（Hybrid RAG + curated 兜底）
+│   │   └── orchestrator.py    # 多 Agent 编排：Quest 状态机 + Project Card
+│   ├── rag/
+│   │   ├── corpus.py          # Library 文档库（含正文，按段切块）
+│   │   ├── retriever.py       # 零依赖 BM25（中文词表 + 2-gram，英文切词）
+│   │   ├── embeddings.py      # Embedding 后端：API / fastembed / 哈希兜底（可插拔）
+│   │   ├── vector_index.py    # 向量索引：SQLite 缓存 + 余弦检索
+│   │   └── hybrid.py          # BM25+向量 RRF 融合（hybrid/vector/bm25，失败降级）
 │   ├── core/
 │   │   ├── prompts.py         # 所有提示词（迭代效果只改这里）
 │   │   ├── json_utils.py      # 稳健 JSON 提取
 │   │   └── guard.py           # 成本防护：每日预算熔断 / 单 IP 限流 / 错误脱敏
-│   ├── memory/store.py        # SQLite：会话/消息/路线图/任务状态
+│   ├── memory/
+│   │   ├── store.py           # SQLite：会话/消息/路线图/记忆/摘要/向量缓存
+│   │   └── memory_service.py  # 画像提取 / 会话摘要 / 记忆上下文
 │   └── mock_data/golden_path.py  # 黄金路径预制数据（扩散模型主题）
 ├── tests/                     # pytest：单元 / 契约 / 降级（MOCK 模式，不联网）
 │   ├── conftest.py            # 环境隔离基座 + 公共 fixture
@@ -381,20 +436,32 @@ XUniversity/
 │   ├── test_api_contract.py
 │   ├── test_fallback.py
 │   ├── test_librarian.py
+│   ├── test_rag.py
+│   ├── test_memory.py
+│   ├── test_professor_rag.py
+│   ├── test_orchestrator.py
 │   ├── test_hardening.py
-│   └── test_guard.py
+│   ├── test_guard.py
+│   └── test_vector_rag.py
 ├── pytest.ini
 ├── requirements-dev.txt       # 开发/测试依赖
+├── requirements-rag.txt       # 可选：fastembed 本地 embedding（离线语义检索）
 ├── scripts/smoke_test.py      # 端到端冒烟测试
+├── scripts/ref_compare.py     # Professor references 质量对比（真实 SSE）
 └── data/                      # 运行时生成 xuniversity.db
 ```
 
-## 7. Phase 2 / Phase 3 接入点
+## 7. 第二阶段已完成能力 & 后续接入点
 
-- **RAG（Library）**：`app/agents/librarian.py` 顶部已写明接入方案（切块 → embedding → Chroma/LanceDB → 召回 + rerank）。
-  实现 `_retrieve_via_rag()` 后把模块顶部的 `RAG_ENABLED` 改为 `True` 即可切换；返回结构不变，前端无需改动。
-  （未实现时该分支会主动抛 `NotImplementedError`，避免「以为切到了 RAG、其实还在吃精选语料」。）
-- **Memory 升级**：`store.py` 接口与实现分离，可平滑换成 Redis/Postgres；路线图上下文拼装在 `core/prompts.py::build_context_block`；
-- **多 Agent 协作**：以 `scholar.py` 为编排者，按 roadmap 的 stage/task 调度 librarian → professor → lab_mentor，前端也可按空间切换直接调对应端点；
+- **RAG（Library，已升级 v2：Hybrid）**：`app/rag/` 在零依赖 BM25（中文专业词表 + 2-gram、
+  英文切词、标题加权）之上新增向量语义路，RRF 融合两路排名；embedding 后端可插拔：
+  OpenAI 兼容 API（推荐硅基流动免费 BGE）/ fastembed 本地 ONNX（可选 `requirements-rag.txt`）/
+  确定性哈希兜底；段落向量持久化到 SQLite，启动不重算；任何 embedding 失败自动降级 BM25，路演不中断。
+  返回结构与 v1 完全一致，前端无需改动。后续接 arXiv 实时检索只需新增一路 chunk 排名进 RRF。
+- **Memory（已完成 v1）**：`memories` 表（画像 / 进度卡点 / 笔记，支持全局记忆）+ `summaries` 表（长对话 LLM 摘要）；
+  Scholar 澄清完成自动提取画像，Professor 答疑自动注入画像并记录卡点。存储接口与实现分离，可平滑换成 Redis/Postgres。
+- **多 Agent 协作（已完成 v1）**：`orchestrator.py` 实现 Quest 状态机
+  `created → clarifying → quest_ready → library → professor → lab → project_ready`，
+  推荐前端用 `POST /quest/advance` 驱动 3D 场景移动；Lab 完成自动生成 Project Card（标题/摘要/产出物/技术栈/下一步）。
 - **工具调用**：在 `agents/` 下新增 tool（arXiv 检索、代码执行等），通过 DeepSeek function calling 接入；
 - **稳定性**：所有真实调用均有 try/except + mock 降级；路演前把黄金路径在 `MOCK_MODE=true` 下彩排一遍即可零风险演示。

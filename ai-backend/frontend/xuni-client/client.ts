@@ -25,12 +25,19 @@ import type {
   LabGuidanceResult,
   LabInput,
   LibraryRetrieveResult,
+  MemoryListResult,
+  MemoryRememberInput,
   ProfessorChatInput,
   ProfessorEvent,
   ProfessorHandlers,
   ProfessorResult,
   ProgressInput,
   ProgressResult,
+  QuestAdvanceInput,
+  QuestAdvanceResult,
+  QuestEvent,
+  QuestHandlers,
+  QuestStatusResult,
   RetrieveInput,
   RoadmapEvent,
   RoadmapHandlers,
@@ -53,7 +60,7 @@ export class ApiError extends Error {
 }
 
 /** SSE 事件基类：后端 data 里一定有 type 字段 */
-type AnySseEvent = ClarifyEvent | RoadmapEvent | ProfessorEvent;
+type AnySseEvent = ClarifyEvent | RoadmapEvent | ProfessorEvent | QuestEvent;
 
 const DEFAULT_BASE = "http://127.0.0.1:8000/api";
 
@@ -167,12 +174,16 @@ export class XUniversityClient {
 
   /** AI Professor 答疑，自动携带路线图与当前任务上下文 */
   async streamProfessorChat(input: ProfessorChatInput, handlers: ProfessorHandlers = {}, signal?: AbortSignal): Promise<ProfessorResult> {
-    const result: ProfessorResult = { text: "", fallback: false };
+    const result: ProfessorResult = { text: "", references: [], fallback: false };
     await this.streamPost<ProfessorEvent>("/professor/chat", input, (ev) => {
       switch (ev.event) {
         case "token":
           result.text += ev.data.delta;
           handlers.onToken?.(ev.data.delta);
+          break;
+        case "references":
+          result.references = ev.data.references;
+          handlers.onReferences?.(ev.data.references);
           break;
         case "fallback":
           result.fallback = true;
@@ -194,6 +205,82 @@ export class XUniversityClient {
   /** 实验室实践指导（结构化 JSON） */
   async labGuidance(input: LabInput): Promise<LabGuidanceResult> {
     return this.request<LabGuidanceResult>("/lab/guidance", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
+  // ============ Quest：多 Agent 编排 ============
+
+  /** 查询 Quest 状态机（当前空间 / 任务完成情况 / Project Card） */
+  async getQuest(sessionId: string): Promise<QuestStatusResult> {
+    return this.request<QuestStatusResult>(`/quest/${encodeURIComponent(sessionId)}`);
+  }
+
+  /**
+   * 推进 Quest 一个阶段（SSE）。
+   * - created/clarifying：input.message 必填，走 Scholar 澄清；
+   * - quest_ready：生成路线图；library：检索资料；professor：进入 Lab；
+   * - lab：生成实践指导 + Project Card。
+   * 空间切换通过 handlers.onQuest 回调，前端据此驱动 3D 场景移动。
+   */
+  async advanceQuest(input: QuestAdvanceInput, handlers: QuestHandlers = {}, signal?: AbortSignal): Promise<QuestAdvanceResult> {
+    const result: QuestAdvanceResult = { status: "created", project: null };
+    await this.streamPost<QuestEvent>("/quest/advance", input, (ev) => {
+      switch (ev.event) {
+        case "quest":
+          result.status = ev.data.status;
+          handlers.onQuest?.(ev.data.status, ev.data.message);
+          break;
+        case "token":
+          handlers.onToken?.(ev.data.delta);
+          break;
+        case "ready":
+          handlers.onReady?.(ev.data.ready);
+          break;
+        case "status":
+          handlers.onStatus?.(ev.data.stage);
+          break;
+        case "roadmap":
+          handlers.onRoadmap?.(ev.data.roadmap);
+          break;
+        case "references":
+          handlers.onReferences?.(ev.data.references);
+          break;
+        case "lab_guidance":
+          handlers.onLabGuidance?.(ev.data.guidance);
+          break;
+        case "project":
+          result.project = ev.data.project;
+          handlers.onProject?.(ev.data.project);
+          break;
+        case "fallback":
+          handlers.onFallback?.(ev.data.reason);
+          break;
+        case "error":
+          result.error = ev.data.message;
+          handlers.onError?.(ev.data.message);
+          break;
+        case "done":
+          break;
+      }
+    }, signal);
+    return result;
+  }
+
+  // ============ Memory ============
+
+  /** 读取长期记忆（画像 / 进度卡点 / 笔记） */
+  async recallMemory(sessionId: string, kind?: string, key?: string): Promise<MemoryListResult> {
+    const params = new URLSearchParams({ session_id: sessionId });
+    if (kind) params.set("kind", kind);
+    if (key) params.set("key", key);
+    return this.request<MemoryListResult>(`/memory?${params.toString()}`);
+  }
+
+  /** 写入一条长期记忆 */
+  async rememberMemory(input: MemoryRememberInput): Promise<{ ok: boolean }> {
+    return this.request<{ ok: boolean }>("/memory/remember", {
       method: "POST",
       body: JSON.stringify(input),
     });

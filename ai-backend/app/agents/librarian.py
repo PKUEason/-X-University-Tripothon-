@@ -1,47 +1,74 @@
 """Librarian：Library 空间的资料检索。
 
-Phase 1（当前）：黄金路径精选语料 + 关键词匹配，保证演示稳定。
-Phase 2 接入点（落在 _retrieve_via_rag）：
-  1. 把精选 PDF / 论文文本切块，用 embedding 模型向量化存入 Chroma / LanceDB；
-  2. 改为「向量召回 + rerank」，并补充 arXiv API 实时检索工具；
-  3. 返回结构保持不变，前端无需改动。
+第二阶段（向量升级）：默认走 Hybrid RAG = BM25 + 向量（RRF 融合），
+curated 精选语料作为兜底：
+  - MOCK_MODE=true（路演保险）→ 走 curated，结果完全确定；
+  - 真实模式且 RAG_ENABLED → hybrid 检索（向量后端不可用时自动降级 BM25）；
+  - 命中为空（生僻/空泛查询）→ 回退 curated，保证空间不空；
+  - 返回结构保持不变（documents/engine/notice），前端无需改动。
+
+Embedding 后端配置见 .env（EMBEDDING_PROVIDER / EMBEDDING_BASE_URL / EMBEDDING_API_KEY）。
 """
 from typing import Any
 
+from app.config import settings
 from app.mock_data import golden_path as mock
+from app.rag.embeddings import build_provider
+from app.rag.hybrid import HybridRetriever
 
-# Phase 2 开关：实现完 _retrieve_via_rag 后改为 True。
-#
-# 这里原本写的是 `if settings.mock_mode or True:`——条件恒真，真实检索分支是死代码，
-# 而且会让读代码的人误以为「检索行为会随 MOCK_MODE 变化」。实际不会：
-# Library 在 Phase 1 永远走精选语料。现在改成显式常量，意图一目了然。
-RAG_ENABLED = False
+# RAG 总开关。要强制只走精选语料（排查问题/对比效果）改为 False。
+RAG_ENABLED = True
 
-# 两个实现都必须返回的字段，前端按此渲染（见 README「接口契约」3.3）
+# 返回字段，前端按此渲染（见 README「接口契约」3.3）
 CONTRACT_KEYS = ("documents", "engine", "notice")
+
+# 进程内单例：构建 embedding 后端（auto 探测，失败已在工厂内降级）+ 混合检索器
+_embedding_provider = build_provider()
+_hybrid = HybridRetriever(provider=_embedding_provider, mode=settings.rag_mode)
 
 
 def retrieve(query: str, top_k: int = 5) -> dict[str, Any]:
-    if RAG_ENABLED:
-        return _retrieve_via_rag(query, top_k)
-    return _retrieve_via_curated(query, top_k)
+    if settings.mock_mode or not RAG_ENABLED:
+        return _retrieve_via_curated(query, top_k)
+
+    documents = _hybrid.search(query, top_k=top_k)
+    if documents:
+        return {
+            "documents": documents,
+            "engine": _hybrid.engine,
+            "notice": _build_notice(),
+        }
+    # 零命中（生僻/空泛查询）：回退精选语料，保证空间不空
+    fallback = _retrieve_via_curated(query, top_k)
+    fallback["notice"] = "Hybrid RAG 未命中，已回退精选语料。"
+    return fallback
+
+
+def search_documents(query: str, top_k: int = 5) -> list[dict[str, Any]]:
+    """检索归口，返回纯 documents 列表（供 Professor 等其他 Agent 复用，
+    产品语义 = 教授答疑前先让图书管理员取资料）。
+
+    检索是本地确定性计算（hybrid 的向量路在断网时自动降级 BM25），
+    因此不受 MOCK_MODE 影响——mock 只切换 LLM 生成，不切换检索。
+    RAG 关闭 / hybrid 零命中 → curated 兜底，保证总有结果。"""
+    if not RAG_ENABLED:
+        return mock.library_docs(query, top_k=top_k)
+    documents = _hybrid.search(query, top_k=top_k)
+    return documents if documents else mock.library_docs(query, top_k=top_k)
+
+
+def _build_notice() -> str:
+    if _hybrid.degraded:
+        return f"向量检索不可用，已降级 BM25（{_hybrid.degraded_reason[:60]}）。"
+    if _hybrid.mode == "bm25":
+        return "BM25 关键词检索（RAG_MODE=bm25）。"
+    return f"Hybrid RAG：BM25 + 向量 RRF 融合（{_embedding_provider.name}）。"
 
 
 def _retrieve_via_curated(query: str, top_k: int = 5) -> dict[str, Any]:
-    """Phase 1：精选语料 + 关键词打分，不依赖网络与余额。"""
+    """精选语料 + 关键词打分，不依赖网络与余额。"""
     return {
         "documents": mock.library_docs(query, top_k=top_k),
         "engine": "curated-v1",
-        "notice": "Phase 1 精选语料检索；Phase 2 将升级为向量 RAG + arXiv 实时检索。",
+        "notice": "精选语料检索（MOCK / 兜底模式）。",
     }
-
-
-def _retrieve_via_rag(query: str, top_k: int = 5) -> dict[str, Any]:
-    """Phase 2 待实现：向量召回 + rerank。
-
-    返回值必须与 _retrieve_via_curated 同构（CONTRACT_KEYS），前端无需改动。
-    未实现前保持 fail-fast，避免「以为切到了 RAG、其实还在吃精选语料」。
-    """
-    raise NotImplementedError(
-        "RAG 检索尚未实现：请先完成本文件顶部说明的接入步骤，再打开 RAG_ENABLED。"
-    )

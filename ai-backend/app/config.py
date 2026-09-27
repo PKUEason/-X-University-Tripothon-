@@ -42,6 +42,23 @@ class Settings:
         # 默认给得比较宽：它的目标是拦住失控循环/脚本刷接口，不是给正常演示设卡。
         # 注意走隧道时所有用户共享一个来源 IP，等于全局限流，别调太小。
         self.rate_limit_per_minute: int = _int("RATE_LIMIT_PER_MINUTE", 120)
+
+        # ---------- 向量 RAG（第二阶段升级） ----------
+        # RAG 检索模式：hybrid（BM25+向量 RRF 融合，默认）/ vector（仅向量）/ bm25（仅关键词）
+        self.rag_mode: str = os.getenv("RAG_MODE", "hybrid").strip().lower()
+        # Embedding 后端：
+        #   auto（默认，按下面顺序探测）/ api（OpenAI 兼容端点）/ fastembed（本地 ONNX，可选依赖）
+        #   hash（零依赖确定性哈希，测试/兜底）/ none（关闭向量路）
+        self.embedding_provider: str = os.getenv("EMBEDDING_PROVIDER", "auto").strip().lower()
+        self.embedding_base_url: str = os.getenv("EMBEDDING_BASE_URL", "").strip().rstrip("/")
+        self.embedding_api_key: str = os.getenv("EMBEDDING_API_KEY", "").strip()
+        # 硅基流动（免费 BGE）示例：BAAI/bge-m3；OpenAI：text-embedding-3-small
+        self.embedding_model: str = os.getenv("EMBEDDING_MODEL", "BAAI/bge-m3").strip()
+        # fastembed 本地模型（仅 EMBEDDING_PROVIDER=fastembed 时使用）
+        self.embedding_local_model: str = os.getenv(
+            "EMBEDDING_LOCAL_MODEL", "BAAI/bge-small-zh-v1.5"
+        ).strip()
+
         self.data_dir.mkdir(parents=True, exist_ok=True)
 
     @property

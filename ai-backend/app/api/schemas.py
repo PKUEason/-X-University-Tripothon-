@@ -79,3 +79,21 @@ class LabRequest(BaseModel):
 class ProgressRequest(BaseModel):
     task_id: str
     status: TaskStatus
+
+
+class MemoryQuery(BaseModel):
+    session_id: str
+    kind: Optional[str] = None
+    key: Optional[str] = None
+
+
+class MemoryRememberRequest(BaseModel):
+    session_id: str
+    kind: Literal["profile", "progress", "note"] = "note"
+    key: str
+    content: str
+
+
+class QuestAdvanceRequest(BaseModel):
+    session_id: str
+    message: Optional[str] = None

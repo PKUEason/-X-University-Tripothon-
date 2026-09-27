@@ -1,0 +1,114 @@
+<html style="margin:0;padding:0;">
+<title>X University 向量 RAG 升级 · Hybrid 架构交付</title>
+<div style="width:100%;box-sizing:border-box;background:#0f172a;color:#e2e8f0;font-family:'Segoe UI','Microsoft YaHei',sans-serif;padding:28px 26px 30px;">
+
+  <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;">
+    <div style="font-size:22px;font-weight:700;color:#f8fafc;">向量 RAG 升级 · Hybrid Retrieval</div>
+    <div style="font-size:13px;color:#94a3b8;">commit b443d4d ｜ app/rag/ ｜ 前端零改动</div>
+  </div>
+  <div style="font-size:13px;color:#94a3b8;margin-top:6px;">BM25 关键词 + 向量语义，RRF 融合；embedding 后端可插拔、失败自动降级，路演不中断。</div>
+
+  <!-- 主流程 -->
+  <div style="display:flex;align-items:stretch;gap:0;margin-top:22px;flex-wrap:wrap;">
+    <div style="display:flex;align-items:center;">
+      <div style="background:#1e293b;border:1px solid #334155;border-radius:10px;padding:14px 16px;width:120px;box-sizing:border-box;">
+        <div style="font-size:14px;font-weight:600;color:#f1f5f9;">用户 Query</div>
+        <div style="font-size:11.5px;color:#94a3b8;margin-top:5px;line-height:1.5;">如「DDPM 训练目标是什么」</div>
+      </div>
+      <div style="color:#475569;font-size:22px;padding:0 8px;">→</div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:10px;justify-content:center;">
+      <div style="background:#082f33;border:1px solid #155e63;border-radius:10px;padding:11px 14px;width:230px;box-sizing:border-box;">
+        <div style="font-size:13.5px;font-weight:600;color:#5eead4;">① BM25 关键词路</div>
+        <div style="font-size:11.5px;color:#9cc4c2;margin-top:4px;line-height:1.5;">中文专业词表 + 2-gram、英文切词、标题加权；chunk 级排名</div>
+      </div>
+      <div style="background:#1e2a44;border:1px solid #33406b;border-radius:10px;padding:11px 14px;width:230px;box-sizing:border-box;">
+        <div style="font-size:13.5px;font-weight:600;color:#93b4fc;">② 向量语义路</div>
+        <div style="font-size:11.5px;color:#a9b8dd;margin-top:4px;line-height:1.5;">段落 embedding → 余弦相似度；query 实时向量化</div>
+      </div>
+    </div>
+
+    <div style="display:flex;align-items:center;">
+      <div style="color:#475569;font-size:22px;padding:0 8px;">→</div>
+      <div style="background:#3b2f12;border:1px solid #8a6d2b;border-radius:10px;padding:14px 14px;width:130px;box-sizing:border-box;">
+        <div style="font-size:13.5px;font-weight:700;color:#fbbf24;">RRF 融合</div>
+        <div style="font-size:11px;color:#d6c59a;margin-top:5px;line-height:1.5;">Σ 1/(60+rank+1)<br>只看排名，不看分数量纲</div>
+      </div>
+      <div style="color:#475569;font-size:22px;padding:0 8px;">→</div>
+      <div style="background:#1e293b;border:1px solid #334155;border-radius:10px;padding:14px 14px;width:120px;box-sizing:border-box;">
+        <div style="font-size:13.5px;font-weight:600;color:#f1f5f9;">聚合回文档</div>
+        <div style="font-size:11.5px;color:#94a3b8;margin-top:5px;line-height:1.5;">每文档取最高分段落作 snippet</div>
+      </div>
+      <div style="color:#475569;font-size:22px;padding:0 8px;">→</div>
+      <div style="background:#16291c;border:1px solid #2f6b45;border-radius:10px;padding:14px 14px;width:130px;box-sizing:border-box;">
+        <div style="font-size:13.5px;font-weight:700;color:#4ade80;">documents</div>
+        <div style="font-size:11px;color:#9cc9ab;margin-top:5px;line-height:1.5;">结构同 v1，前端零改动</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 向量路支撑 -->
+  <div style="display:flex;gap:12px;margin-top:22px;flex-wrap:wrap;">
+    <div style="flex:1;min-width:250px;background:#1e293b;border:1px solid #334155;border-radius:10px;padding:13px 15px;box-sizing:border-box;">
+      <div style="font-size:13.5px;font-weight:600;color:#f1f5f9;">Embedding 后端可插拔（EMBEDDING_PROVIDER）</div>
+      <div style="margin-top:9px;display:flex;flex-direction:column;gap:6px;font-size:12px;">
+        <div><span style="color:#4ade80;font-weight:600;">api</span><span style="color:#94a3b8;"> — OpenAI 兼容端点；推荐硅基流动免费 BGE（bge-m3）</span></div>
+        <div><span style="color:#93b4fc;font-weight:600;">fastembed</span><span style="color:#94a3b8;"> — 本地 ONNX，离线可跑（可选 requirements-rag.txt，不污染主环境）</span></div>
+        <div><span style="color:#fbbf24;font-weight:600;">hash</span><span style="color:#94a3b8;"> — 零依赖确定性特征哈希，测试/兜底（无语义）</span></div>
+        <div><span style="color:#94a3b8;font-weight:600;">auto</span><span style="color:#94a3b8;"> — API → fastembed → hash 逐级探测</span></div>
+      </div>
+    </div>
+    <div style="flex:1;min-width:220px;background:#1e293b;border:1px solid #334155;border-radius:10px;padding:13px 15px;box-sizing:border-box;">
+      <div style="font-size:13.5px;font-weight:600;color:#f1f5f9;">向量持久化缓存</div>
+      <div style="font-size:12px;color:#94a3b8;margin-top:8px;line-height:1.65;">
+        SQLite 新表 <span style="color:#cbd5e1;">embedding_cache</span>，按 <span style="color:#cbd5e1;">provider.name</span> 隔离；换后端/模型缓存互不覆盖，混入异维向量自动剔除重算；启动不重算。
+      </div>
+    </div>
+    <div style="flex:1;min-width:220px;background:#2a1d24;border:1px solid #6b3345;border-radius:10px;padding:13px 15px;box-sizing:border-box;">
+      <div style="font-size:13.5px;font-weight:600;color:#fda4af;">自动降级（fail-safe）</div>
+      <div style="font-size:12px;color:#d6a9b6;margin-top:8px;line-height:1.65;">
+        embedding 任何异常（断网/超时/Key 无效）→ 自动切纯 BM25，engine 标 <span style="color:#fda4af;">bm25-v1</span>、notice 说明原因；零命中再回退 curated。
+      </div>
+    </div>
+  </div>
+
+  <!-- engine 与模式 -->
+  <div style="display:flex;gap:12px;margin-top:14px;flex-wrap:wrap;align-items:stretch;">
+    <div style="flex:2;min-width:300px;background:#172033;border:1px solid #2c3a55;border-radius:10px;padding:12px 15px;box-sizing:border-box;">
+      <div style="font-size:12.5px;color:#94a3b8;">engine 标记（前端调试用，可不展示）</div>
+      <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:8px;font-size:11.5px;">
+        <span style="background:#334155;color:#e2e8f0;border-radius:6px;padding:4px 9px;">curated-v1</span>
+        <span style="background:#334155;color:#e2e8f0;border-radius:6px;padding:4px 9px;">bm25-v1</span>
+        <span style="background:#1e3a5f;color:#bfdbfe;border-radius:6px;padding:4px 9px;">vector-v2(&lt;后端&gt;)</span>
+        <span style="background:#14432a;color:#bbf7d0;border-radius:6px;padding:4px 9px;">hybrid-v2(bm25+&lt;后端&gt;)</span>
+      </div>
+    </div>
+    <div style="flex:1;min-width:180px;background:#172033;border:1px solid #2c3a55;border-radius:10px;padding:12px 15px;box-sizing:border-box;">
+      <div style="font-size:12.5px;color:#94a3b8;">RAG_MODE</div>
+      <div style="display:flex;gap:7px;margin-top:8px;font-size:11.5px;">
+        <span style="background:#14432a;color:#bbf7d0;border-radius:6px;padding:4px 9px;font-weight:600;">hybrid 默认</span>
+        <span style="background:#334155;color:#e2e8f0;border-radius:6px;padding:4px 9px;">vector</span>
+        <span style="background:#334155;color:#e2e8f0;border-radius:6px;padding:4px 9px;">bm25</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 验证 -->
+  <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;">
+    <div style="background:#16291c;border:1px solid #2f6b45;border-radius:8px;padding:9px 14px;font-size:12.5px;color:#86efac;font-weight:600;">pytest 203 passed（新增 24）</div>
+    <div style="background:#16291c;border:1px solid #2f6b45;border-radius:8px;padding:9px 14px;font-size:12.5px;color:#86efac;font-weight:600;">smoke 17 passed / 0 failed</div>
+    <div style="background:#16291c;border:1px solid #2f6b45;border-radius:8px;padding:9px 14px;font-size:12.5px;color:#86efac;font-weight:600;">TS verify-live 真实链路全通过</div>
+    <div style="background:#2a2118;border:1px solid #6b522c;border-radius:8px;padding:9px 14px;font-size:12.5px;color:#fcd34d;">已实测：DeepSeek 无 embedding 端点（/embeddings 全 404）</div>
+  </div>
+
+  <!-- 待拍板 -->
+  <div style="margin-top:16px;background:#1a2334;border-left:3px solid #fbbf24;border-radius:6px;padding:11px 15px;font-size:12.5px;color:#cbd5e1;line-height:1.7;">
+    <span style="color:#fbbf24;font-weight:700;">待你拍板：</span>
+    ① 当前 auto 无配置落 hash 兜底（管线是真 hybrid 但无语义增益）——花 2 分钟注册 <span style="color:#e2e8f0;">siliconflow.cn</span>（送额度）拿免费 BGE key 填进 .env 即得真语义，我无法代办；
+    ② 路演当天默认 hybrid，还是保险切 bm25 / MOCK；
+    ③ 确认后由你同步团队库 ai-backend/（D:\XUniversity-Tripothon）。
+  </div>
+
+</div>
+</html>

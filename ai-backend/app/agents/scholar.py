@@ -17,6 +17,7 @@ from app.agents.llm import llm
 from app.config import settings
 from app.core import prompts
 from app.core.guard import public_error_message
+from app.memory.memory_service import extract_profile
 from app.memory.store import store
 from app.mock_data import golden_path as mock
 
@@ -139,6 +140,8 @@ def stream_clarify(session_id: str, message: str) -> Iterator[dict]:
         yield {"type": "ready", "ready": ready}
         store.add_message(session_id, "assistant", reply, agent="scholar")
         store.update_state(session_id, clarify_ready=ready)
+        if ready:
+            extract_profile(session_id)
         yield {"type": "done"}
         return
 
@@ -187,6 +190,8 @@ def stream_clarify(session_id: str, message: str) -> Iterator[dict]:
     store.add_message(session_id, "assistant", reply_text, agent="scholar")
     store.update_state(session_id, clarify_ready=ready)
     yield {"type": "ready", "ready": ready}
+    if ready:
+        extract_profile(session_id)
     yield {"type": "done"}
 
 

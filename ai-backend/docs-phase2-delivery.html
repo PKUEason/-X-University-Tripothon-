@@ -1,0 +1,113 @@
+<html style="margin:0;padding:0;">
+<title>X University AI 后端 · 第二阶段交付图</title>
+<div style="width:100%;box-sizing:border-box;padding:20px 16px;background:#0b1020;color:#e8ecf8;font-family:'Segoe UI','Microsoft YaHei',sans-serif;">
+
+  <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:4px;">
+    <span style="font-size:22px;font-weight:700;color:#7dd3fc;">X University · AI Backend</span>
+    <span style="font-size:14px;color:#94a3b8;">第二阶段交付：RAG / Memory / AI Professor / 多 Agent 全部做完整</span>
+  </div>
+  <div style="font-size:12px;color:#64748b;margin-bottom:18px;">提交 f3f2fe6 · 已推送 Rayne142/XUniversity（团队仓库待你同步）</div>
+
+  <!-- Quest 状态机 -->
+  <div style="font-size:13px;font-weight:600;color:#a5b4fc;margin-bottom:8px;">Quest 状态机（与 3D 空间流转一一对应，advanceQuest 驱动）</div>
+  <div style="display:flex;align-items:stretch;gap:0;flex-wrap:wrap;margin-bottom:6px;">
+    <div style="flex:1;min-width:96px;background:#17203a;border:1px solid #2b3a5e;border-radius:8px;padding:8px 6px;text-align:center;">
+      <div style="font-size:12px;font-weight:600;color:#e8ecf8;">created</div>
+      <div style="font-size:11px;color:#8b9bb8;margin-top:3px;">进入大学</div>
+    </div>
+    <div style="display:flex;align-items:center;color:#47557a;padding:0 3px;font-size:13px;">→</div>
+    <div style="flex:1;min-width:96px;background:#17203a;border:1px solid #2b3a5e;border-radius:8px;padding:8px 6px;text-align:center;">
+      <div style="font-size:12px;font-weight:600;color:#fcd34d;">clarifying</div>
+      <div style="font-size:11px;color:#8b9bb8;margin-top:3px;">X Gate 澄清</div>
+    </div>
+    <div style="display:flex;align-items:center;color:#47557a;padding:0 3px;font-size:13px;">→</div>
+    <div style="flex:1;min-width:96px;background:#17203a;border:1px solid #2b3a5e;border-radius:8px;padding:8px 6px;text-align:center;">
+      <div style="font-size:12px;font-weight:600;color:#86efac;">quest_ready</div>
+      <div style="font-size:11px;color:#8b9bb8;margin-top:3px;">生成路线图</div>
+    </div>
+    <div style="display:flex;align-items:center;color:#47557a;padding:0 3px;font-size:13px;">→</div>
+    <div style="flex:1;min-width:96px;background:#14302a;border:1px solid #1f6b53;border-radius:8px;padding:8px 6px;text-align:center;">
+      <div style="font-size:12px;font-weight:600;color:#6ee7b7;">library</div>
+      <div style="font-size:11px;color:#9fc7b8;margin-top:3px;">📚 检索资料</div>
+    </div>
+    <div style="display:flex;align-items:center;color:#47557a;padding:0 3px;font-size:13px;">→</div>
+    <div style="flex:1;min-width:96px;background:#2a2342;border:1px solid #5b3f86;border-radius:8px;padding:8px 6px;text-align:center;">
+      <div style="font-size:12px;font-weight:600;color:#d8b4fe;">professor</div>
+      <div style="font-size:11px;color:#b8a5d8;margin-top:3px;">👨‍🏫 研讨答疑</div>
+    </div>
+    <div style="display:flex;align-items:center;color:#47557a;padding:0 3px;font-size:13px;">→</div>
+    <div style="flex:1;min-width:96px;background:#3a2418;border:1px solid #8a5527;border-radius:8px;padding:8px 6px;text-align:center;">
+      <div style="font-size:12px;font-weight:600;color:#fdba74;">lab</div>
+      <div style="font-size:11px;color:#d8ab84;margin-top:3px;">🧪 动手实践</div>
+    </div>
+    <div style="display:flex;align-items:center;color:#47557a;padding:0 3px;font-size:13px;">→</div>
+    <div style="flex:1;min-width:96px;background:#10351f;border:1px solid #1f8a4c;border-radius:8px;padding:8px 6px;text-align:center;">
+      <div style="font-size:12px;font-weight:600;color:#4ade80;">project_ready</div>
+      <div style="font-size:11px;color:#93d4a8;margin-top:3px;">🚀 Project Card</div>
+    </div>
+  </div>
+  <div style="font-size:11px;color:#64748b;margin-bottom:20px;">空间切换时发 <span style="color:#a5b4fc;">quest</span> 事件；Lab 结束自动发 <span style="color:#4ade80;">project</span> 事件（标题/摘要/产出物/技术栈/下一步）</div>
+
+  <!-- 四大能力 -->
+  <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px;">
+    <div style="flex:1;min-width:230px;background:#131c33;border:1px solid #243657;border-radius:10px;padding:12px 14px;">
+      <div style="font-size:14px;font-weight:700;color:#7dd3fc;margin-bottom:6px;">① RAG · 检索增强</div>
+      <ul style="margin:0;padding-left:16px;font-size:12px;color:#b6c2dd;line-height:1.7;">
+        <li>app/rag 内置 10 篇文档（DDPM→评估，含正文）</li>
+        <li>零依赖 BM25：中文词表+2-gram、英文切词、标题加权</li>
+        <li>MOCK / 零命中自动回退 curated，前端零改动</li>
+        <li>引擎标记 rag-v1-bm25，可平滑升级向量检索</li>
+      </ul>
+    </div>
+    <div style="flex:1;min-width:230px;background:#131c33;border:1px solid #243657;border-radius:10px;padding:12px 14px;">
+      <div style="font-size:14px;font-weight:700;color:#d8b4fe;margin-bottom:6px;">② Memory · 长期记忆</div>
+      <ul style="margin:0;padding-left:16px;font-size:12px;color:#b6c2dd;line-height:1.7;">
+        <li>memories 表：画像 / 进度卡点 / 笔记，支持全局</li>
+        <li>Scholar 澄清后 LLM 自动提取学生画像</li>
+        <li>summaries 表：长对话自动摘要（阈值 12 条）</li>
+        <li>新增 GET /memory、POST /memory/remember</li>
+      </ul>
+    </div>
+    <div style="flex:1;min-width:230px;background:#131c33;border:1px solid #243657;border-radius:10px;padding:12px 14px;">
+      <div style="font-size:14px;font-weight:700;color:#fdba74;margin-bottom:6px;">③ Professor + ④ 多 Agent</div>
+      <ul style="margin:0;padding-left:16px;font-size:12px;color:#b6c2dd;line-height:1.7;">
+        <li>答疑前 RAG 检索，snippet 注入 system prompt</li>
+        <li>回答后发 references 事件（可点击来源）</li>
+        <li>画像自动注入，卡点写入 Memory</li>
+        <li>orchestrator 状态机委托全部 Agent，输出 Project Card</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 验证 + 下一步 -->
+  <div style="display:flex;gap:12px;flex-wrap:wrap;">
+    <div style="flex:1.2;min-width:280px;background:#0f1a2e;border:1px solid #22355a;border-radius:10px;padding:12px 14px;">
+      <div style="font-size:13px;font-weight:700;color:#86efac;margin-bottom:8px;">验证结果（真跑过，非推断）</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <div style="background:#14263f;border-radius:8px;padding:8px 14px;text-align:center;">
+          <div style="font-size:20px;font-weight:700;color:#7dd3fc;">179</div>
+          <div style="font-size:11px;color:#8b9bb8;">pytest 全绿</div>
+        </div>
+        <div style="background:#14263f;border-radius:8px;padding:8px 14px;text-align:center;">
+          <div style="font-size:20px;font-weight:700;color:#6ee7b7;">17</div>
+          <div style="font-size:11px;color:#8b9bb8;">smoke 全过</div>
+        </div>
+        <div style="background:#14263f;border-radius:8px;padding:8px 14px;text-align:center;">
+          <div style="font-size:20px;font-weight:700;color:#4ade80;">✓</div>
+          <div style="font-size:11px;color:#8b9bb8;">真实链路 Quest 走通</div>
+        </div>
+      </div>
+    </div>
+    <div style="flex:1;min-width:240px;background:#1a1428;border:1px solid #4a3268;border-radius:10px;padding:12px 14px;">
+      <div style="font-size:13px;font-weight:700;color:#d8b4fe;margin-bottom:8px;">下一步（建议）</div>
+      <ol style="margin:0;padding-left:18px;font-size:12px;color:#cbb8e6;line-height:1.8;">
+        <li>你把内容同步到团队仓库 ai-backend/</li>
+        <li>全栈按 INTEGRATION 2.1 用 advanceQuest 接 3D 场景切换</li>
+        <li>晚 21:00 同步：演示 Quest 全流程 + Project Card</li>
+        <li>演示前确认 API_TOKEN / HOST，赛后轮换 key</li>
+      </ol>
+    </div>
+  </div>
+
+</div>
+</html>

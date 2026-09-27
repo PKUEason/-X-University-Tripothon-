@@ -186,6 +186,7 @@ export type RoadmapEvent =
 /** Professor 答疑事件 */
 export type ProfessorEvent =
   | SseEnvelope<"token", { type: "token"; delta: string }>
+  | SseEnvelope<"references", { type: "references"; references: Resource[] }>
   | SseEnvelope<"fallback", { type: "fallback"; reason: string }>
   | SseEnvelope<"error", { type: "error"; message: string }>
   | SseEnvelope<"done", { type: "done" }>;
@@ -207,6 +208,7 @@ export interface RoadmapResult {
 
 export interface ProfessorResult {
   text: string;
+  references: Resource[];
   fallback: boolean;
   error?: string;
 }
@@ -229,6 +231,103 @@ export interface RoadmapHandlers {
 
 export interface ProfessorHandlers {
   onToken?: (delta: string) => void;
+  onReferences?: (references: Resource[]) => void;
   onFallback?: (reason: string) => void;
   onError?: (message: string) => void;
+}
+
+// ---------------- Project Card（Quest 最终成果） ----------------
+
+export interface ProjectCard {
+  title: string;
+  summary: string;
+  deliverables: string[];
+  tech_stack: string[];
+  next_steps: string[];
+}
+
+// ---------------- Quest 状态机（多 Agent 编排） ----------------
+
+/** Quest 状态，与后端 orchestrator.QUEST_STATUSES 一致 */
+export type QuestStatusValue =
+  | "created"
+  | "clarifying"
+  | "quest_ready"
+  | "library"
+  | "professor"
+  | "lab"
+  | "project_ready";
+
+/** GET /quest/{id} 响应 */
+export interface QuestStatusResult {
+  session_id: string;
+  status: QuestStatusValue;
+  goal: string | null;
+  total_tasks: number;
+  completed_tasks: string[];
+  project: ProjectCard | null;
+}
+
+export interface QuestAdvanceInput {
+  session_id: string;
+  /** created/clarifying 阶段必填：学生说的话 */
+  message?: string;
+}
+
+/** POST /quest/advance 事件（包含各 Agent 透传事件 + quest 切换事件） */
+export type QuestEvent =
+  | SseEnvelope<"quest", { type: "quest"; status: QuestStatusValue; message: string }>
+  | SseEnvelope<"token", { type: "token"; delta: string }>
+  | SseEnvelope<"ready", { type: "ready"; ready: boolean }>
+  | SseEnvelope<"status", { type: "status"; stage: string }>
+  | SseEnvelope<"roadmap", { type: "roadmap"; roadmap: Roadmap }>
+  | SseEnvelope<"references", { type: "references"; references: Resource[] }>
+  | SseEnvelope<"lab_guidance", { type: "lab_guidance"; guidance: LabGuidanceResult }>
+  | SseEnvelope<"project", { type: "project"; project: ProjectCard }>
+  | SseEnvelope<"fallback", { type: "fallback"; reason: string }>
+  | SseEnvelope<"error", { type: "error"; message: string }>
+  | SseEnvelope<"done", { type: "done" }>;
+
+export interface QuestHandlers {
+  onQuest?: (status: QuestStatusValue, message: string) => void;
+  onToken?: (delta: string) => void;
+  onReady?: (ready: boolean) => void;
+  onStatus?: (stage: string) => void;
+  onRoadmap?: (roadmap: Roadmap) => void;
+  onReferences?: (references: Resource[]) => void;
+  onLabGuidance?: (guidance: LabGuidanceResult) => void;
+  onProject?: (project: ProjectCard) => void;
+  onFallback?: (reason: string) => void;
+  onError?: (message: string) => void;
+}
+
+export interface QuestAdvanceResult {
+  status: QuestStatusValue;
+  project: ProjectCard | null;
+  error?: string;
+}
+
+// ---------------- Memory ----------------
+
+export type MemoryKind = "profile" | "progress" | "note";
+
+export interface MemoryItem {
+  id: number;
+  session_id: string | null;
+  kind: MemoryKind;
+  key: string;
+  content: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MemoryListResult {
+  memories: MemoryItem[];
+}
+
+export interface MemoryRememberInput {
+  session_id: string;
+  kind?: MemoryKind;
+  key: string;
+  content: string;
 }

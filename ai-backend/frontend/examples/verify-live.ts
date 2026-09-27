@@ -54,7 +54,38 @@ async function main(): Promise<void> {
   if (!second.ready || !roadmap.stages.length || !pt || !lab.steps.length || firstTask?.status !== "done") {
     throw new Error("有环节未达到预期");
   }
-  console.log("\n全部通过 ✓ SDK ↔ 后端 ↔ DeepSeek 真实链路正常");
+  console.log("[7/8] 基础链路全部通过");
+
+  // ---------- 8. Quest 编排全流程（多 Agent + Project Card + Memory） ----------
+  const questSession = await xuni.createSession({ goal: "Quest 编排验证", nickname: "quest" });
+  const qid = questSession.session_id;
+  let current = "created";
+  let questResult = await xuni.advanceQuest(
+    { session_id: qid, message: "我想用两周跑通扩散模型文生图 Demo" },
+    {
+      onQuest: (s, m) => { current = s; console.log("      quest →", s, "|", m); },
+      onProject: (p) => console.log("      project card:", p.title),
+    },
+  );
+  // 第一轮可能仍需追问（真实模型行为不固定）
+  if (current === "clarifying") {
+    questResult = await xuni.advanceQuest(
+      { session_id: qid, message: "有 PyTorch 基础，每天 3 小时" },
+      { onQuest: (s) => (current = s) },
+    );
+  }
+  // 之后一路推进到 project_ready
+  let guard = 0;
+  while (current !== "project_ready" && guard++ < 8) {
+    questResult = await xuni.advanceQuest({ session_id: qid }, { onQuest: (s) => (current = s) });
+  }
+  const mem = await xuni.recallMemory(qid);
+  console.log(`[8/8] Quest 编排 OK: status=${current}, 记忆 ${mem.memories.length} 条`);
+
+  if (current !== "project_ready" || !questResult.project) {
+    throw new Error("Quest 编排未走通或缺少 Project Card");
+  }
+  console.log("\n全部通过 ✓ SDK ↔ 后端 ↔ DeepSeek 真实链路正常（含多 Agent 编排）");
 }
 
 main().catch((err) => {

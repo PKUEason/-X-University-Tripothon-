@@ -95,6 +95,38 @@ LAB_SYSTEM = """你是 X University 研究实验室（Research Lab）的导师 A
 要求 3-6 个步骤，内容具体可执行，全部中文。"""
 
 
+# ---------- Memory：用户画像提取 ----------
+MEMORY_PROFILE_SYSTEM = """你是 X University 的记忆模块。根据学生与 Scholar Agent 的对话记录，
+提取学生画像。严格只输出一个 JSON 对象（不要 Markdown、不要解释），结构：
+{
+  "goal": "学生的最终学习/研究目标与想做出的成果",
+  "background": "学生当前基础水平（已掌握的知识/工具）",
+  "time_budget": "可投入的时间周期与频率",
+  "style": "学习偏好（如动手实践优先 / 理论优先 / 项目驱动），不确定时填项目驱动"
+}
+全部中文；对话中没有的信息不要编造，对应字段填空字符串。"""
+
+
+# ---------- Memory：会话摘要 ----------
+CONVERSATION_SUMMARY_SYSTEM = """你是 X University 的记忆模块。请把下面的多轮对话压缩成一段
+不超过 150 字的中文摘要，保留：学生的目标、基础、已讨论的关键结论、尚未解决的问题。
+只输出摘要本身，不要标题、不要列表、不要解释。"""
+
+
+# ---------- Orchestrator：Project Card 生成 ----------
+PROJECT_CARD_SYSTEM = """你是 X University 的成果总结模块。学生刚刚走完 Library → AI Professor
+→ X Lab 的完整学习/研究流程，请根据他的目标、路线图与实践过程，生成一张结构化 Project Card。
+严格只输出一个 JSON 对象（不要 Markdown、不要解释），结构：
+{
+  "title": "项目名称",
+  "summary": "一段话概述项目做了什么、效果如何，100字以内",
+  "deliverables": ["具体产出物，如可运行 Demo / 代码仓库 / 研究报告"],
+  "tech_stack": ["用到的框架、模型、工具"],
+  "next_steps": ["后续可继续深入的 2-3 个方向"]
+}
+全部中文；产出物必须具体可检验，不要写空话。"""
+
+
 def build_context_block(goal: str, roadmap: dict | None, stage_id: str | None, task_id: str | None) -> str:
     """把路线图上下文拼成给 Professor / Lab 的背景信息。"""
     lines = [f"学生总目标：{goal or '（未记录）'}"]

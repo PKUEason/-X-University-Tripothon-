@@ -1,0 +1,13 @@
+# 向量 RAG 可选依赖：本地 ONNX embedding（fastembed）。
+#
+# 主 requirements.txt 刻意不包含它：fastembed 会拉入 onnxruntime / tokenizers /
+# huggingface_hub / requests 等较重的依赖，路演基线保持轻量。
+#
+# 需要「本地、离线、不把文档发给第三方」的语义检索时安装：
+#   pip install -r requirements-rag.txt
+# 然后在 .env 设置 EMBEDDING_PROVIDER=fastembed；
+# 首次运行会自动下载 BGE 模型（约 100MB，缓存后离线可用；
+# 国内网络可先设置 HF_ENDPOINT=https://hf-mirror.com）。
+#
+# 不想装本地模型也可以用 API：EMBEDDING_PROVIDER=api + 硅基流动免费 BGE，无需本文件。
+fastembed>=0.8,<0.9
