@@ -337,6 +337,51 @@ def library_docs(query: str, top_k: int = 5) -> list[dict]:
     return (hits or _LIBRARY_DOCS)[:top_k]
 
 
+# ---------------- Library：arXiv 最新论文（mock） ----------------
+_MOCK_ARXIV_PAPERS = [
+    {"title": "Denoising Diffusion Probabilistic Models",
+     "authors": ["Jonathan Ho", "Ajay Jain", "Pieter Abbeel"],
+     "year": "2020", "url": "https://arxiv.org/abs/2006.11239",
+     "snippet": "We present high quality image synthesis results using diffusion probabilistic models, a class of latent variable models inspired by considerations from nonequilibrium thermodynamics."},
+    {"title": "High-Resolution Image Synthesis with Latent Diffusion Models",
+     "authors": ["Robin Rombach", "Andreas Blattmann", "Dominik Lorenz", "Patrick Esser", "Björn Ommer"],
+     "year": "2022", "url": "https://arxiv.org/abs/2112.10752",
+     "snippet": "By crossing the limits of conventional pixel-based diffusion models, we propose latent diffusion models (LDMs) which operate in the latent space of a pretrained autoencoder."},
+    {"title": "Score-Based Generative Modeling through Stochastic Differential Equations",
+     "authors": ["Yang Song", "Jascha Sohl-Dickstein", "Diederik P. Kingma", "Abhishek Kumar", "Stefano Ermon", "Ben Poole"],
+     "year": "2021", "url": "https://arxiv.org/abs/2011.13456",
+     "snippet": "We introduce a unified framework for score-based generative models by generalizing diffusion processes and Langevin dynamics into stochastic differential equations (SDEs)."},
+    {"title": "Denoising Diffusion Implicit Models",
+     "authors": ["Jiaming Song", "Chenlin Meng", "Stefano Ermon"],
+     "year": "2021", "url": "https://arxiv.org/abs/2010.02502",
+     "snippet": "We present denoising diffusion implicit models (DDIMs), a more efficient class of iterative implicit probabilistic models with the same training procedure as DDPMs."},
+    {"title": "LoRA: Low-Rank Adaptation of Large Language Models",
+     "authors": ["Edward J. Hu", "Yelong Shen", "Phillip Wallis", "Zeyuan Allen-Zhu", "Yuanzhi Li", "Shean Wang", "Lu Wang"],
+     "year": "2022", "url": "https://arxiv.org/abs/2106.09685",
+     "snippet": "We propose Low-Rank Adaptation, or LoRA, which freezes the pretrained model weights and injects trainable rank decomposition matrices into each layer of the Transformer architecture."},
+    {"title": "Learning Transferable Visual Models From Natural Language Supervision",
+     "authors": ["Alec Radford", "Jong Wook Kim", "Chris Hallacy", "Aditya Ramesh", "Gabriel Goh", "Sandhini Agarwal", "Girish Sastry", "Amanda Askell", "Pamela Mishkin", "Jack Clark", "Gretchen Krueger", "Ilya Sutskever"],
+     "year": "2021", "url": "https://arxiv.org/abs/2103.00020",
+     "snippet": "We present a simple pre-training task as an efficient and scalable way to learn SOTA image representations from scratch: contrastive learning of image-text pairs (CLIP)."},
+]
+
+
+def arxiv_papers(query: str, top_k: int = 3) -> list[dict]:
+    """MOCK 模式下的 arXiv 论文列表（扩散模型主题，真实存在的论文）。"""
+    q = (query or "").lower()
+    if not q:
+        return _MOCK_ARXIV_PAPERS[:top_k]
+    tokens = [t for t in re.split(r"\s+", q) if t] + re.findall(r"[一-龥]{2,}", q)
+
+    def score(paper):
+        hay = (paper["title"] + paper["snippet"]).lower()
+        return sum(1 for t in tokens if t and t.lower() in hay)
+
+    ranked = sorted(_MOCK_ARXIV_PAPERS, key=score, reverse=True)
+    hits = [p for p in ranked if score(p) > 0]
+    return (hits or _MOCK_ARXIV_PAPERS)[:top_k]
+
+
 # ---------------- Professor：答疑 ----------------
 def professor_answer(message: str, task_title: Optional[str] = None) -> str:
     return (

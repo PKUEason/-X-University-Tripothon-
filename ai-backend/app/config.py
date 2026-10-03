@@ -59,6 +59,11 @@ class Settings:
             "EMBEDDING_LOCAL_MODEL", "BAAI/bge-small-zh-v1.5"
         ).strip()
 
+        # ---------- arXiv 实时检索（Library 最新论文区） ----------
+        self.arxiv_enabled: bool = os.getenv("ARXIV_ENABLED", "true").strip().lower() == "true"
+        self.arxiv_timeout: float = float(os.getenv("ARXIV_TIMEOUT", "8.0"))
+        self.arxiv_top_k: int = int(os.getenv("ARXIV_TOP_K", "3"))
+
         self.data_dir.mkdir(parents=True, exist_ok=True)
 
     @property

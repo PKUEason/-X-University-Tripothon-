@@ -273,9 +273,22 @@ SSE 说明：响应为 `text/event-stream`，每条消息含 `event:` 与 `data:
 {
   "documents": [{ "title": "...", "type": "paper", "url": "https://arxiv.org/…", "snippet": "……" }],
   "engine": "hybrid-v2(bm25+api:BAAI/bge-m3)",
-  "notice": "Hybrid RAG：BM25 + 向量 RRF 融合；MOCK 模式或零命中时回退 curated-v1"
+  "notice": "Hybrid RAG：BM25 + 向量 RRF 融合；MOCK 模式或零命中时回退 curated-v1。 另附 3 篇 arXiv 最新论文。",
+  "arxiv_papers": [
+    { "title": "Denoising Diffusion Probabilistic Models",
+      "authors": ["Jonathan Ho", "Ajay Jain", "Pieter Abbeel"],
+      "year": "2020", "url": "https://arxiv.org/abs/2006.11239",
+      "snippet": "We present high quality image synthesis results using diffusion probabilistic models…" }
+  ],
+  "arxiv_status": "ok"
 }
 ```
+`arxiv_papers` / `arxiv_status` 是第三阶段新增的**分区展示**字段（additive，前端零改动）：
+- `arxiv_status`：`ok` / `failed`（超时或网络异常，已降级空列表）/ `disabled`（ARXIV_ENABLED=false）；
+- arXiv 失败只影响 `arxiv_papers`，本地 `documents` 始终正常返回；
+- MOCK 模式返回预制扩散模型论文（真实存在），保证演示完整；
+- Professor 的 `references` 仍只用本地资料，不混入 arXiv（避免外部内容进入 prompt）。
+
 engine 取值：`curated-v1`（MOCK/兜底）、`bm25-v1`（纯关键词 / 向量降级）、
 `vector-v2(<后端>)`、`hybrid-v2(bm25+<后端>)`；`<后端>` 如 `api:BAAI/bge-m3` /
 `fastembed:BAAI/bge-small-zh-v1.5` / `hash-deterministic-256`（未配置时的兜底，无语义）。

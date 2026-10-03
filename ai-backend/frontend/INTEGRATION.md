@@ -43,6 +43,14 @@ Library 检索已从纯 BM25 升级为 **Hybrid = BM25 + 向量语义（RRF 融�
   重启后端即可。不想注册也可本地离线方案：`pip install -r requirements-rag.txt` +
   `EMBEDDING_PROVIDER=fastembed`（首次自动下载约 100MB 模型）。
 
+### 0.2 arXiv 实时检索（第三阶段，前端零改动）
+
+Library 响应新增两个 additive 字段，分区展示「本地资料 + 最新论文」：
+- `arxiv_papers: [{title, authors, year, url, snippet}]` — arXiv 最新论文（默认 3 篇）；
+- `arxiv_status: "ok" | "failed" | "disabled"` — 失败时 `arxiv_papers` 为空，本地 `documents` 不受影响。
+- 前端可在资料区下方加一个「最新论文」卡片组；不展示也完全兼容（字段被忽略）。
+- MOCK 模式返回预制扩散模型论文，演示稳定；真实模式调 arXiv 官方 API（免费、8 秒超时降级）。
+
 ## 1. 空间 ↔ 接口映射
 
 | 3D 空间 | 进入时调用 | 交互中调用 | 驱动什么 |
