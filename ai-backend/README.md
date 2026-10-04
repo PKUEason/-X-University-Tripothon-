@@ -273,9 +273,27 @@ SSE 说明：响应为 `text/event-stream`，每条消息含 `event:` 与 `data:
 {
   "documents": [{ "title": "...", "type": "paper", "url": "https://arxiv.org/…", "snippet": "……" }],
   "engine": "hybrid-v2(bm25+api:BAAI/bge-m3)",
-  "notice": "Hybrid RAG：BM25 + 向量 RRF 融合；MOCK 模式或零命中时回退 curated-v1"
+  "notice": "按当前项目主题筛选的本地资料；arXiv 论文独立检索。",
+  "query": "我想学习扩散模型",
+  "coverage": ["diffusion"],
+  "retrieval_version": 3,
+  "arxiv_query": "diffusion models",
+  "arxiv_papers": [
+    { "title": "Denoising Diffusion Probabilistic Models",
+      "authors": ["Jonathan Ho", "Ajay Jain", "Pieter Abbeel"],
+      "year": "2020", "url": "https://arxiv.org/abs/2006.11239",
+      "snippet": "We present high quality image synthesis results using diffusion probabilistic models…" }
+  ],
+  "arxiv_status": "ok"
 }
 ```
+`arxiv_papers` / `arxiv_status` 用于分区展示；校园前端已接入，旧客户端需要渲染新增字段才能看到论文：
+- `arxiv_status`：`ok`（空列表表示无命中）、`failed`（网络或接口异常）、`disabled`（配置未启用）、`mock`（演示模式未联网）、`needs_query`（需补充英文检索词）。
+- arXiv 失败不影响本地结果；本地未覆盖的项目也独立搜索 arXiv，不回填其他项目的扩散模型资料。
+- 可选输入 `arxiv_query` 只调整论文检索词，不改变项目目标；默认从当前项目需求生成有限的主题关键词，返回实际检索词供核对。
+- MOCK 模式不返回预制论文冒充真实搜索；Professor 暂时仍只引用本地资料。
+- 结果按项目保存，`retrieval_version=3` 支持旧资料刷新。详见 [校园前端](../campus-frontend/README.md)。
+
 engine 取值：`curated-v1`（MOCK/兜底）、`bm25-v1`（纯关键词 / 向量降级）、
 `vector-v2(<后端>)`、`hybrid-v2(bm25+<后端>)`；`<后端>` 如 `api:BAAI/bge-m3` /
 `fastembed:BAAI/bge-small-zh-v1.5` / `hash-deterministic-256`（未配置时的兜底，无语义）。
@@ -457,7 +475,7 @@ XUniversity/
   英文切词、标题加权）之上新增向量语义路，RRF 融合两路排名；embedding 后端可插拔：
   OpenAI 兼容 API（推荐硅基流动免费 BGE）/ fastembed 本地 ONNX（可选 `requirements-rag.txt`）/
   确定性哈希兜底；段落向量持久化到 SQLite，启动不重算；任何 embedding 失败自动降级 BM25，路演不中断。
-  返回结构与 v1 完全一致，前端无需改动。后续接 arXiv 实时检索只需新增一路 chunk 排名进 RRF。
+  保留原有 documents 字段。arXiv 已作为独立论文区接入，暂未加入本地 RRF 排名或 Professor 上下文。
 - **Memory（已完成 v1）**：`memories` 表（画像 / 进度卡点 / 笔记，支持全局记忆）+ `summaries` 表（长对话 LLM 摘要）；
   Scholar 澄清完成自动提取画像，Professor 答疑自动注入画像并记录卡点。存储接口与实现分离，可平滑换成 Redis/Postgres。
 - **多 Agent 协作（已完成 v1）**：`orchestrator.py` 实现 Quest 状态机

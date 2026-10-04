@@ -43,6 +43,17 @@ Library 检索已从纯 BM25 升级为 **Hybrid = BM25 + 向量语义（RRF 融�
   重启后端即可。不想注册也可本地离线方案：`pip install -r requirements-rag.txt` +
   `EMBEDDING_PROVIDER=fastembed`（首次自动下载约 100MB 模型）。
 
+### 0.2 arXiv 实时检索与校园接入
+
+校园前端已展示本地资料与 arXiv 相关论文。接口新增字段兼容旧客户端，但旧客户端必须渲染新字段才能看到论文：
+- `arxiv_papers: [{title, authors, year, url, snippet}]`：相关论文，默认 3 篇。
+- `arxiv_status: "ok" | "failed" | "disabled" | "mock" | "needs_query"`：成功空列表表示无命中；失败不伪造资料。
+- `arxiv_query`：实际英文检索词；`POST /api/library/retrieve` 可以传入该字段手动调整，不改变项目目标。
+- `query`、`coverage`、`retrieval_version=3`：当前项目需求、本地覆盖范围和结果版本；旧缓存进入 Library 时刷新。
+- 本地资料按项目主题筛选，无命中时不回填无关扩散资料。外部论文检索独立执行；演示模式明确显示未联网，不返回预制论文冒充真实结果。
+- 真实模式使用 HTTPS，默认 8 秒请求超时；有限的中英主题映射和短语查询，其他中文主题要求补充英文关键词。Professor 暂不自动引用 arXiv 论文。
+- 校园启动与交接参见 [`../../campus-frontend/README.md`](../../campus-frontend/README.md)。
+
 ## 1. 空间 ↔ 接口映射
 
 | 3D 空间 | 进入时调用 | 交互中调用 | 驱动什么 |
