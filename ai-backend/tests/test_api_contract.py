@@ -124,15 +124,15 @@ def test_library_retrieve(client, session):
     assert r.status_code == 200
     body = r.json()
     assert body["engine"] == "curated-v1"
-    assert 0 < len(body["documents"]) <= 3
-    for doc in body["documents"]:
-        assert set(doc) == {"title", "type", "url", "snippet"}
+    assert 0 < len(body["results"]) <= 3
+    for doc in body["results"]:
+        assert {"title", "type", "url", "snippet", "source"} <= set(doc)
         assert doc["title"]
 
 
 def test_library_top_k_respected(client, session):
     r = client.post("/api/library/retrieve", json={"session_id": session, "query": "扩散", "top_k": 2})
-    assert len(r.json()["documents"]) <= 2
+    assert len(r.json()["results"]) <= 2
 
 
 def test_library_writes_to_transcript(client, session):

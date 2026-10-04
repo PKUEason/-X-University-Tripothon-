@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
+import {fileURLToPath} from 'node:url';
 import {build} from 'esbuild';
 import {Window} from 'happy-dom';
-const root=new URL('../',import.meta.url).pathname;
+const root=fileURLToPath(new URL('../',import.meta.url));
 const html=(await readFile(root+'index.html','utf8')).replace(/<script\b[^>]*>[\s\S]*?<\/script>/g,'').replace(/<link\b[^>]*>/g,'');
 const bundle=await build({entryPoints:[root+'src/app.js'],bundle:true,write:false,format:'iife',plugins:[{name:'controlled-dom-environment',setup(build){build.onResolve({filter:/\/world\.js$/},()=>({path:'world',namespace:'fixture'}));build.onResolve({filter:/\/student\.js$/},()=>({path:'student',namespace:'fixture'}));build.onResolve({filter:/\/sdk\.js$/},()=>({path:'sdk',namespace:'fixture'}));build.onLoad({filter:/.*/,namespace:'fixture'},args=>({contents:args.path==='sdk'?`export class XUniversityClient {constructor(){return window.__client;}}`:args.path==='student'?`export function createStudentPreview(){return {setProfile(){}};}`:`export function createWorld(options){window.__world={position:{...options.position},settings:options.settings,stop(){},setStudent(profile){this.profile=profile;},applySettings(settings){this.settings=settings;},resetCamera(){this.cameraReset=true;},getPosition(){return {...this.position};},reset(){this.position={x:0,z:16};options.onSpace('gate');},walkTo(id){this.lastTarget=id;options.onSpace(id);options.onArrive(id);},enterManually(id){options.onSpace(id);}};return window.__world;}` }));}}]});
 const stopEvent={preventDefault(){}};

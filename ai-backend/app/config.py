@@ -64,6 +64,13 @@ class Settings:
         self.arxiv_timeout = float(os.getenv("ARXIV_TIMEOUT", "8.0"))
         self.arxiv_top_k = max(1, min(10, _int("ARXIV_TOP_K", 3)))
 
+        # Web search (Bing RSS, free no-key; Tavily optional with key).
+        self.web_search_enabled = _bool("WEB_SEARCH_ENABLED", "true")
+        self.web_search_provider: str = os.getenv("WEB_SEARCH_PROVIDER", "auto").strip().lower()
+        self.web_search_timeout = float(os.getenv("WEB_SEARCH_TIMEOUT", "10.0"))
+        self.web_search_max_results = max(1, min(20, _int("WEB_SEARCH_MAX_RESULTS", 6)))
+        self.tavily_api_key: str = os.getenv("TAVILY_API_KEY", "").strip()
+
         self.data_dir.mkdir(parents=True, exist_ok=True)
 
     @property

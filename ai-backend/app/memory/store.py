@@ -15,7 +15,10 @@ def _now() -> str:
 
 class Store:
     def __init__(self, db_path) -> None:
-        self._lock = threading.Lock()
+        # RLock（可重入）：get_state 调用 get_session、update_state 调用 get_state，
+        # 嵌套加锁时不会死锁。check_same_thread=False 下多线程并发读写同一连接，
+        # 所有读写都必须经过这把锁。
+        self._lock = threading.RLock()
         self.conn = sqlite3.connect(str(db_path), check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self._init_db()
@@ -92,7 +95,8 @@ class Store:
         return sid
 
     def get_session(self, sid: str) -> Optional[dict[str, Any]]:
-        row = self.conn.execute("SELECT * FROM sessions WHERE session_id=?", (sid,)).fetchone()
+        with self._lock:
+            row = self.conn.execute("SELECT * FROM sessions WHERE session_id=?", (sid,)).fetchone()
         return dict(row) if row else None
 
     def delete_session(self, sid: str) -> None:
@@ -113,9 +117,11 @@ class Store:
         return json.loads(s["state"] or "{}") if s else {}
 
     def update_state(self, sid: str, **kv) -> None:
-        state = self.get_state(sid)
-        state.update(kv)
+        # 读-改-写必须在同一把锁里，否则两个并发 update_state 会丢更新。
         with self._lock:
+            row = self.conn.execute("SELECT state FROM sessions WHERE session_id=?", (sid,)).fetchone()
+            state = json.loads(row["state"] or "{}") if row else {}
+            state.update(kv)
             self.conn.execute(
                 "UPDATE sessions SET state=?, updated_at=? WHERE session_id=?",
                 (json.dumps(state, ensure_ascii=False), _now(), sid),
@@ -139,7 +145,8 @@ class Store:
             sql += " AND agent=?"
             args.append(agent)
         sql += " ORDER BY id ASC"
-        rows = self.conn.execute(sql, args).fetchall()
+        with self._lock:
+            rows = self.conn.execute(sql, args).fetchall()
         return [dict(r) for r in rows][-limit:]
 
     # ---------- roadmap ----------
@@ -152,21 +159,29 @@ class Store:
             self.conn.commit()
 
     def get_roadmap(self, sid: str) -> Optional[dict[str, Any]]:
-        row = self.conn.execute("SELECT content FROM roadmaps WHERE session_id=?", (sid,)).fetchone()
+        with self._lock:
+            row = self.conn.execute("SELECT content FROM roadmaps WHERE session_id=?", (sid,)).fetchone()
         return json.loads(row["content"]) if row else None
 
     def set_task_status(self, sid: str, task_id: str, status: str) -> bool:
-        roadmap = self.get_roadmap(sid)
-        if not roadmap:
-            return False
-        hit = False
-        for stage in roadmap.get("stages", []):
-            for task in stage.get("tasks", []):
-                if task.get("id") == task_id:
-                    task["status"] = status
-                    hit = True
-        if hit:
-            self.save_roadmap(sid, roadmap)
+        # 读-改-写在同一把锁里，避免并发更新 roadmap 时丢任务状态。
+        with self._lock:
+            row = self.conn.execute("SELECT content FROM roadmaps WHERE session_id=?", (sid,)).fetchone()
+            if not row:
+                return False
+            roadmap = json.loads(row["content"])
+            hit = False
+            for stage in roadmap.get("stages", []):
+                for task in stage.get("tasks", []):
+                    if task.get("id") == task_id:
+                        task["status"] = status
+                        hit = True
+            if hit:
+                self.conn.execute(
+                    "INSERT OR REPLACE INTO roadmaps(session_id, content, created_at) VALUES (?,?,?)",
+                    (sid, json.dumps(roadmap, ensure_ascii=False), _now()),
+                )
+                self.conn.commit()
         return hit
 
     # ---------- long-term memories ----------
@@ -203,9 +218,10 @@ class Store:
             clauses.append("key=?")
             args.append(key)
         where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
-        rows = self.conn.execute(
-            f"SELECT * FROM memories{where} ORDER BY session_id IS NULL DESC, id ASC", args
-        ).fetchall()
+        with self._lock:
+            rows = self.conn.execute(
+                f"SELECT * FROM memories{where} ORDER BY session_id IS NULL DESC, id ASC", args
+            ).fetchall()
         return [dict(r) for r in rows]
 
     def forget(self, sid: Optional[str], kind: str, key: str) -> bool:
@@ -216,6 +232,24 @@ class Store:
             )
             self.conn.commit()
             return cur.rowcount > 0
+
+    def cleanup_request_cache(self, sid: str, keep: int = 10) -> int:
+        """删除该会话超过 keep 个的旧 request:* 幂等缓存，返回删除条数。
+
+        advance() 每次带 request_id 成功后都会 save_artifact("request:<id>", events)，
+        不清理的话 memories 表会无限增长。保留最近 keep 条足够覆盖前端重试场景。
+        """
+        with self._lock:
+            rows = self.conn.execute(
+                "SELECT id FROM memories WHERE session_id=? AND key LIKE 'request:%' ORDER BY id DESC",
+                (sid,),
+            ).fetchall()
+            stale = [r["id"] for r in rows[keep:]]
+            if stale:
+                placeholders = ",".join("?" * len(stale))
+                self.conn.execute(f"DELETE FROM memories WHERE id IN ({placeholders})", stale)
+                self.conn.commit()
+            return len(stale)
 
     # ---------- conversation summaries ----------
     def save_summary(self, sid: str, agent: str, content: str, up_to_id: int) -> None:
@@ -228,10 +262,11 @@ class Store:
             self.conn.commit()
 
     def get_summary(self, sid: str, agent: str) -> Optional[dict[str, Any]]:
-        row = self.conn.execute(
-            "SELECT * FROM summaries WHERE session_id=? AND agent=? ORDER BY id DESC LIMIT 1",
-            (sid, agent),
-        ).fetchone()
+        with self._lock:
+            row = self.conn.execute(
+                "SELECT * FROM summaries WHERE session_id=? AND agent=? ORDER BY id DESC LIMIT 1",
+                (sid, agent),
+            ).fetchone()
         return dict(row) if row else None
 
     # ---------- embedding cache（向量 RAG） ----------
@@ -241,11 +276,12 @@ class Store:
         if not ref_keys:
             return {}
         placeholders = ",".join("?" * len(ref_keys))
-        rows = self.conn.execute(
-            f"SELECT ref_key, vector, dim FROM embedding_cache"
-            f" WHERE scope=? AND model=? AND ref_key IN ({placeholders})",
-            [scope, model, *ref_keys],
-        ).fetchall()
+        with self._lock:
+            rows = self.conn.execute(
+                f"SELECT ref_key, vector, dim FROM embedding_cache"
+                f" WHERE scope=? AND model=? AND ref_key IN ({placeholders})",
+                [scope, model, *ref_keys],
+            ).fetchall()
         out = {}
         for row in rows:
             try:
