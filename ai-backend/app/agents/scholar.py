@@ -194,7 +194,7 @@ def stream_clarify(session_id: str, message: str) -> Iterator[dict]:
     if background:
         messages.append({
             "role": "system",
-            "content": f"[背景资料]\n{background}\n以上是用户目标相关的参考资料，用于更准确地理解用户意图和技术背景。",
+            "content": f"[联网搜索结果]\n以下是关于用户目标的实时搜索结果，请参考：\n{background}\n（以上为联网搜索结果，可用于更准确地理解用户意图和技术背景。）",
         })
 
     reply_text = ""
@@ -335,7 +335,7 @@ def generate_roadmap(session_id: str) -> Iterator[dict]:
     # 联网搜索目标相关背景，让路线图的技术栈和学习资源更准确
     background = _search_background(goal)
     if background:
-        user_content += f"\n\n[相关背景资料]\n{background}"
+        user_content += f"\n\n[联网搜索结果]\n以下是关于学生目标的实时搜索结果，请参考：\n{background}"
 
     messages = [
         {"role": "system", "content": prompts.SCHOLAR_ROADMAP_SYSTEM},
