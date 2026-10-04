@@ -20,6 +20,7 @@ from app.core.guard import public_error_message
 from app.memory.memory_service import extract_profile
 from app.memory.store import store
 from app.mock_data import golden_path as mock
+from app.services import web_search
 
 log = logging.getLogger("scholar")
 
@@ -40,6 +41,33 @@ def _heuristic_ready(*texts: str) -> bool:
     blob = " ".join(texts).lower()
     groups = (_READY_BASE_KEYWORDS, _READY_TIME_KEYWORDS, _READY_OUTCOME_KEYWORDS)
     return sum(1 for group in groups if any(k in blob for k in group)) >= 2
+
+
+def _search_background(query: str, max_results: int = 3) -> str:
+    """联网搜索用户提到的概念，返回简要背景文本。
+
+    用于澄清和路线图生成阶段：当用户提到 Agent 不熟悉的技术/领域时，
+    先搜一下背景再让 LLM 回复，避免因信息差导致误判用户意图。
+    mock 模式 / web_search 禁用 / 搜索失败时返回空串，不阻塞主流程。
+    """
+    if settings.mock_mode or not settings.web_search_enabled:
+        return ""
+    try:
+        results, provider = web_search.search(query, max_results=max_results)
+        if provider == "mock":
+            return ""  # 联网失败降级到 mock 语料（扩散模型写死内容），不能当真实背景喂给模型
+        if not results:
+            return ""
+        lines = []
+        for r in results[:max_results]:
+            title = (r.get("title") or "").strip()
+            content = (r.get("content") or "").strip()[:200]
+            if title:
+                lines.append(f"- {title}: {content}")
+        return "\n".join(lines)
+    except Exception as exc:
+        log.warning("scholar 背景搜索失败：%s", exc)
+        return ""
 
 
 def _synthetic_gate_stage() -> dict:
@@ -159,6 +187,15 @@ def stream_clarify(session_id: str, message: str) -> Iterator[dict]:
     history = store.list_messages(session_id, agent="scholar", limit=12)
     messages = [{"role": "system", "content": prompts.SCHOLAR_CLARIFY_SYSTEM}]
     messages += [{"role": m["role"], "content": m["content"]} for m in history]
+
+    # 联网搜索背景：用户可能提到 Agent 不熟悉的技术/领域，先搜一下再回复
+    yield {"type": "status", "stage": "正在了解你的目标…"}
+    background = _search_background(message)
+    if background:
+        messages.append({
+            "role": "system",
+            "content": f"[背景资料]\n{background}\n以上是用户目标相关的参考资料，用于更准确地理解用户意图和技术背景。",
+        })
 
     reply_text = ""
     marker = _MarkerFilter()
@@ -294,6 +331,12 @@ def generate_roadmap(session_id: str) -> Iterator[dict]:
     transcript = store.list_messages(session_id, agent="scholar", limit=12)
     dialogue = "\n".join(f"{m['role']}: {m['content']}" for m in transcript)
     user_content = f"学生目标：{goal}\n\n对话记录：\n{dialogue}"
+
+    # 联网搜索目标相关背景，让路线图的技术栈和学习资源更准确
+    background = _search_background(goal)
+    if background:
+        user_content += f"\n\n[相关背景资料]\n{background}"
+
     messages = [
         {"role": "system", "content": prompts.SCHOLAR_ROADMAP_SYSTEM},
         {"role": "user", "content": user_content},
