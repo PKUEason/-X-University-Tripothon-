@@ -59,6 +59,11 @@ class Settings:
             "EMBEDDING_LOCAL_MODEL", "BAAI/bge-small-zh-v1.5"
         ).strip()
 
+        # arXiv paper search; independent of local collection coverage.
+        self.arxiv_enabled = _bool("ARXIV_ENABLED", "true")
+        self.arxiv_timeout = float(os.getenv("ARXIV_TIMEOUT", "8.0"))
+        self.arxiv_top_k = max(1, min(10, _int("ARXIV_TOP_K", 3)))
+
         self.data_dir.mkdir(parents=True, exist_ok=True)
 
     @property

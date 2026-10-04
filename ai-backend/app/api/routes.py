@@ -1,5 +1,7 @@
 """HTTP + SSE 路由。SSE 事件规范见 README「接口契约」。"""
 import json
+import threading
+from contextlib import contextmanager
 
 from fastapi import APIRouter, HTTPException
 from sse_starlette.sse import EventSourceResponse
@@ -18,16 +20,41 @@ from app.api.schemas import (
     SessionCreate,
 )
 from app.memory.store import store
+from app.memory.artifacts import save_artifact
 
 router = APIRouter()
+# Single-process local server: deletion must not race an Agent writing its result.
+_activity_lock = threading.Lock()
+_active_sessions: dict[str, int] = {}
 
 
-def _sse(generator):
+@contextmanager
+def _using_session(session_id: str):
+    with _activity_lock:
+        _require_session(session_id)
+        _active_sessions[session_id] = _active_sessions.get(session_id, 0) + 1
+    try:
+        yield
+    finally:
+        with _activity_lock:
+            _active_sessions[session_id] -= 1
+            if not _active_sessions[session_id]:
+                del _active_sessions[session_id]
+
+
+def _sse(generator, session_id):
     """把同步的 Agent 事件生成器包成 SSE 响应（阻塞调用放到线程池）。"""
 
     async def event_generator():
-        async for event in iterate_in_threadpool(generator):
-            yield {"event": event["type"], "data": json.dumps(event, ensure_ascii=False)}
+        try:
+            with _using_session(session_id):
+                try:
+                    async for event in iterate_in_threadpool(generator):
+                        yield {"event": event["type"], "data": json.dumps(event, ensure_ascii=False)}
+                finally:
+                    generator.close()
+        except HTTPException as error:
+            yield {"event": "error", "data": json.dumps({"type": "error", "message": error.detail}, ensure_ascii=False)}
 
     return EventSourceResponse(event_generator())
 
@@ -60,11 +87,12 @@ def get_session(session_id: str):
 
 @router.post("/session/{session_id}/progress")
 def update_progress(session_id: str, body: ProgressRequest):
-    _require_session(session_id)
-    ok = store.set_task_status(session_id, body.task_id, body.status)
-    if not ok:
-        raise HTTPException(status_code=404, detail=f"任务不存在：{body.task_id}")
-    return {"ok": True, "task_id": body.task_id, "status": body.status}
+    with _using_session(session_id):
+        _require_session(session_id)
+        ok = store.set_task_status(session_id, body.task_id, body.status)
+        if not ok:
+            raise HTTPException(status_code=404, detail=f"任务不存在：{body.task_id}")
+        return {"ok": True, "task_id": body.task_id, "status": body.status}
 
 
 # ---------------- Memory ----------------
@@ -76,51 +104,73 @@ def recall_memory(session_id: str, kind: str | None = None, key: str | None = No
 
 @router.post("/memory/remember")
 def remember_memory(body: MemoryRememberRequest):
-    _require_session(body.session_id)
-    store.remember(body.session_id, body.kind, body.key, body.content)
-    return {"ok": True}
+    with _using_session(body.session_id):
+        _require_session(body.session_id)
+        store.remember(body.session_id, body.kind, body.key, body.content)
+        return {"ok": True}
 
 
 # ---------------- Scholar Agent ----------------
 @router.post("/scholar/clarify")
 def scholar_clarify(body: ClarifyRequest):
     _require_session(body.session_id)
-    return _sse(scholar.stream_clarify(body.session_id, body.message))
+    return _sse(scholar.stream_clarify(body.session_id, body.message), body.session_id)
 
 
 @router.post("/scholar/roadmap")
 def scholar_roadmap(body: RoadmapRequest):
     _require_session(body.session_id)
-    return _sse(scholar.generate_roadmap(body.session_id))
+    return _sse(scholar.generate_roadmap(body.session_id), body.session_id)
 
 
 # ---------------- Library ----------------
 @router.post("/library/retrieve")
 def library_retrieve(body: RetrieveRequest):
-    _require_session(body.session_id)
-    result = librarian.retrieve(body.query, top_k=body.top_k)
-    store.add_message(body.session_id, "user", f"[Library 检索] {body.query}", agent="librarian")
-    store.add_message(
-        body.session_id, "assistant",
-        f"[Library 检索结果] 共 {len(result['documents'])} 条资料", agent="librarian",
-    )
-    return result
+    with _using_session(body.session_id):
+        _require_session(body.session_id)
+        query = body.query.strip() or librarian.project_query(body.session_id)
+        result = librarian.retrieve(query, top_k=body.top_k, arxiv_query=body.arxiv_query)
+        save_artifact(body.session_id, "library_result", result)
+        store.add_message(body.session_id, "user", f"[Library 检索] {query}", agent="librarian")
+        store.add_message(
+            body.session_id, "assistant",
+            f"[Library 检索结果] 共 {len(result['documents'])} 条资料", agent="librarian",
+        )
+        return result
 
 
 # ---------------- Professor ----------------
 @router.post("/professor/chat")
 def professor_chat(body: ProfessorChatRequest):
     _require_session(body.session_id)
-    return _sse(professor.stream_chat(
-        body.session_id, body.message, stage_id=body.stage_id, task_id=body.task_id
-    ))
+    def events():
+        text, references, fallback, failed = "", [], False, False
+        for event in professor.stream_chat(
+            body.session_id, body.message, stage_id=body.stage_id, task_id=body.task_id
+        ):
+            if event["type"] == "fallback":
+                fallback, text = True, ""
+            if event["type"] == "token":
+                text += event["delta"]
+            if event["type"] == "references":
+                references = event["references"]
+            if event["type"] == "error":
+                failed = True
+            yield event
+        if not failed and text.strip():
+            save_artifact(body.session_id, "professor_result", {
+                "question": body.message, "answer": text, "references": references,
+                "task_id": body.task_id, "degraded": fallback,
+            })
+    return _sse(events(), body.session_id)
 
 
 # ---------------- Lab ----------------
 @router.post("/lab/guidance")
 def lab_guidance(body: LabRequest):
-    _require_session(body.session_id)
-    return lab_mentor.generate_guidance(body.session_id, body.stage_id, body.task_id)
+    with _using_session(body.session_id):
+        _require_session(body.session_id)
+        return lab_mentor.generate_guidance(body.session_id, body.stage_id, body.task_id)
 
 
 # ---------------- Quest 编排（多 Agent） ----------------
@@ -135,4 +185,13 @@ def quest_status(session_id: str):
 @router.post("/quest/advance")
 def quest_advance(body: QuestAdvanceRequest):
     _require_session(body.session_id)
-    return _sse(orchestrator.advance(body.session_id, message=body.message))
+    return _sse(orchestrator.advance(body.session_id, message=body.message, request_id=body.request_id, expected_status=body.expected_status), body.session_id)
+
+
+@router.delete("/session/{session_id}")
+def delete_session(session_id: str):
+    with _activity_lock:
+        if _active_sessions.get(session_id):
+            raise HTTPException(409, "该项目正在处理请求，请等回复完成后再删除。")
+        store.delete_session(session_id)
+    return {"ok": True}

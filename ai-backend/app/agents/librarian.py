@@ -1,74 +1,92 @@
-"""Librarian：Library 空间的资料检索。
+"""Project-scoped retrieval from a small, explicitly covered local collection.
 
-第二阶段（向量升级）：默认走 Hybrid RAG = BM25 + 向量（RRF 融合），
-curated 精选语料作为兜底：
-  - MOCK_MODE=true（路演保险）→ 走 curated，结果完全确定；
-  - 真实模式且 RAG_ENABLED → hybrid 检索（向量后端不可用时自动降级 BM25）；
-  - 命中为空（生僻/空泛查询）→ 回退 curated，保证空间不空；
-  - 返回结构保持不变（documents/engine/notice），前端无需改动。
-
-Embedding 后端配置见 .env（EMBEDDING_PROVIDER / EMBEDDING_BASE_URL / EMBEDDING_API_KEY）。
+Local collection plus independent arXiv search. Unsupported local topics stay empty;
+curated/mock mode must never substitute unrelated diffusion papers.
 """
+import re
+import logging
 from typing import Any
 
 from app.config import settings
 from app.mock_data import golden_path as mock
+from app.rag import arxiv as arxiv_client
+from app.rag.corpus import LIBRARY_CORPUS
 from app.rag.embeddings import build_provider
 from app.rag.hybrid import HybridRetriever
+from app.memory.store import store
 
-# RAG 总开关。要强制只走精选语料（排查问题/对比效果）改为 False。
 RAG_ENABLED = True
-
-# 返回字段，前端按此渲染（见 README「接口契约」3.3）
-CONTRACT_KEYS = ("documents", "engine", "notice")
-
-# 进程内单例：构建 embedding 后端（auto 探测，失败已在工厂内降级）+ 混合检索器
+RETRIEVAL_VERSION = 3
+CONTRACT_KEYS = ('documents', 'engine', 'notice', 'query', 'retrieval_version', 'coverage', 'arxiv_papers', 'arxiv_status', 'arxiv_query')
 _embedding_provider = build_provider()
 _hybrid = HybridRetriever(provider=_embedding_provider, mode=settings.rag_mode)
+TOPICS = {
+    'diffusion': r'扩散|文生图|去噪|潜空间|低秩适配|提示词|图像生成|生成图像|噪声调度|\b(?:ddpm|ddim|diffusion|diffusers|lora|clip|vae|u-net|fid|score-based)\b',
+    'soft_robotics': r'柔性机器人|软体机器人|柔性机械|软体机械|气动|\b(?:soft robotics?|softrobots|pneunets?|sofa)\b',
+}
 
 
-def retrieve(query: str, top_k: int = 5) -> dict[str, Any]:
-    if settings.mock_mode or not RAG_ENABLED:
-        return _retrieve_via_curated(query, top_k)
+def project_query(session_id: str) -> str:
+    session = store.get_session(session_id) or {}
+    messages = store.list_messages(session_id, agent='scholar', limit=20)
+    parts = [session.get('goal') or ''] + [m['content'] for m in messages if m['role'] == 'user']
+    return '\n'.join(dict.fromkeys(p.strip() for p in parts if p.strip()))[:4000]
 
-    documents = _hybrid.search(query, top_k=top_k)
-    if documents:
-        return {
-            "documents": documents,
-            "engine": _hybrid.engine,
-            "notice": _build_notice(),
-        }
-    # 零命中（生僻/空泛查询）：回退精选语料，保证空间不空
-    fallback = _retrieve_via_curated(query, top_k)
-    fallback["notice"] = "Hybrid RAG 未命中，已回退精选语料。"
-    return fallback
+
+def _retrieve_local(query: str, top_k: int = 5, *, force_search: bool = False) -> dict[str, Any]:
+    topics = {topic for topic, pattern in TOPICS.items() if re.search(pattern, query or '', re.I)}
+    eligible = [d for d in LIBRARY_CORPUS if d['topic'] in topics]
+    base = {'query': query, 'retrieval_version': RETRIEVAL_VERSION, 'coverage': sorted(topics)}
+    if not eligible:
+        return {**base, 'documents': [], 'engine': 'local-collection',
+                'notice': '当前资料库尚未覆盖这个项目方向，未找到可推荐的资料。不会用其他项目的文献填充；本地库目前仅覆盖扩散模型与柔性机器人入门资料。下方 arXiv 论文独立检索，尚不包含网页教程。'}
+    allowed = {d['url'] for d in eligible}
+    if (settings.mock_mode and not force_search) or not RAG_ENABLED:
+        documents = mock.library_docs(query, top_k=top_k) if topics == {'diffusion'} else [
+            {'title': d['title'], 'url': d['url'], 'type': d['type'], 'snippet': d['content'][:240]} for d in eligible]
+        documents = [d for d in documents if d['url'] in allowed][:max(0, top_k)]
+        engine, notice = 'curated-v1', '按当前项目主题筛选的本地资料（MOCK / 精选模式），不是全网检索。'
+    else:
+        documents = [d for d in _hybrid.search(query, top_k=len(LIBRARY_CORPUS)) if d['url'] in allowed][:max(0, top_k)]
+        engine, notice = _hybrid.engine, _build_notice()
+        if not documents:
+            notice = '当前项目在本地资料库中没有相关命中；未用其他主题的资料填充。'
+    return {**base, 'documents': documents, 'engine': engine, 'notice': notice}
+
+
+def retrieve(query: str, top_k: int = 5, *, force_search: bool = False, arxiv_query: str | None = None) -> dict[str, Any]:
+    result = _retrieve_local(query, top_k, force_search=force_search)
+    terms = arxiv_query.strip() if arxiv_query is not None else arxiv_client.suggested_terms(query)
+    result['arxiv_query'] = terms
+    result['arxiv_papers'], result['arxiv_status'] = _fetch_arxiv(terms)
+    if result['arxiv_status'] == 'failed':
+        result['notice'] += ' arXiv 检索不可用，请稍后重试。'
+    return result
+
+
+def _fetch_arxiv(query: str) -> tuple[list[dict[str, Any]], str]:
+    if not settings.arxiv_enabled:
+        return [], 'disabled'
+    # Never label canned diffusion papers as live results for another topic.
+    if settings.mock_mode:
+        return [], 'mock'
+    if not query or re.search(r'[\u3400-\u9fff]', query):
+        return [], 'needs_query'
+    try:
+        return arxiv_client.search_arxiv(query, top_k=settings.arxiv_top_k,
+                                        timeout=settings.arxiv_timeout), 'ok'
+    except Exception:
+        logging.getLogger(__name__).warning('arXiv search unavailable')
+        return [], 'failed'
 
 
 def search_documents(query: str, top_k: int = 5) -> list[dict[str, Any]]:
-    """检索归口，返回纯 documents 列表（供 Professor 等其他 Agent 复用，
-    产品语义 = 教授答疑前先让图书管理员取资料）。
-
-    检索是本地确定性计算（hybrid 的向量路在断网时自动降级 BM25），
-    因此不受 MOCK_MODE 影响——mock 只切换 LLM 生成，不切换检索。
-    RAG 关闭 / hybrid 零命中 → curated 兜底，保证总有结果。"""
-    if not RAG_ENABLED:
-        return mock.library_docs(query, top_k=top_k)
-    documents = _hybrid.search(query, top_k=top_k)
-    return documents if documents else mock.library_docs(query, top_k=top_k)
+    return _retrieve_local(query, top_k, force_search=True)['documents']
 
 
 def _build_notice() -> str:
     if _hybrid.degraded:
-        return f"向量检索不可用，已降级 BM25（{_hybrid.degraded_reason[:60]}）。"
-    if _hybrid.mode == "bm25":
-        return "BM25 关键词检索（RAG_MODE=bm25）。"
-    return f"Hybrid RAG：BM25 + 向量 RRF 融合（{_embedding_provider.name}）。"
-
-
-def _retrieve_via_curated(query: str, top_k: int = 5) -> dict[str, Any]:
-    """精选语料 + 关键词打分，不依赖网络与余额。"""
-    return {
-        "documents": mock.library_docs(query, top_k=top_k),
-        "engine": "curated-v1",
-        "notice": "精选语料检索（MOCK / 兜底模式）。",
-    }
+        return '向量检索不可用，已改用本地关键词检索；结果仍按项目主题过滤。'
+    if _hybrid.mode == 'bm25':
+        return '按项目主题筛选的本地 BM25 关键词检索；不是全网检索。'
+    return f'按项目主题筛选的本地 Hybrid RAG（{_embedding_provider.name}）；不是全网检索。'

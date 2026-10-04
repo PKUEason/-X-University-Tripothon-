@@ -177,14 +177,9 @@ def stream_clarify(session_id: str, message: str) -> Iterator[dict]:
         for piece in _chunk(reply):
             yield {"type": "token", "delta": piece}
 
-    if ready is not True:
-        # 兜底条件：模型未明确输出 <<<READY:true>>>（没给标记，或被非标记的 <<< 片段干扰成 false）。
-        # 用启发式判断（基础/时间/成果 三类信息命中≥2），命中则升级为 ready，避免流程卡在澄清阶段。
-        user_texts = [m["content"] for m in history if m.get("role") == "user"] + [message]
-        heuristic = _heuristic_ready(*user_texts)
-        if heuristic:
-            log.info("clarify 标记缺失/为 false，启发式兜底升级 ready=true（模型标记=%s）", ready)
-            ready = True
+    # A missing/false marker must not override an Agent that is still asking questions.
+    # The user can keep replying even when readiness is true; generation is explicit.
+    ready = ready is True
 
     reply_text = reply_text.strip()
     store.add_message(session_id, "assistant", reply_text, agent="scholar")

@@ -1,0 +1,17 @@
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+.env
+dist/
+.DS_Store
+campus-frontend/src/sdk.js
+campus-frontend/evidence/
+ai-backend/data/campus-integration/
+
+campus-frontend/.local/
+
+campus-frontend/src/markdown-vendor.js
+
+# Retired sample character; the campus uses procedural student avatars.
+campus-frontend/public/assets/Soldier.glb

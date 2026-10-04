@@ -7,6 +7,7 @@ from app.config import settings
 from app.core import prompts
 from app.core.guard import public_error_message
 from app.memory.store import store
+from app.memory.artifacts import context as artifact_context
 from app.mock_data import golden_path as mock
 
 log = logging.getLogger("lab")
@@ -41,6 +42,7 @@ def generate_guidance(
 
     if not settings.mock_mode:
         context = prompts.build_context_block(session.get("goal"), roadmap, stage_id, task_id)
+        context += "\n[此前空间产物]\n" + artifact_context(session_id)
         user_msg = (
             f"{context}\n\n当前实验任务：{task_title or '（未指定，按总目标给出实践方案）'}\n"
             f"任务描述：{task_desc or '无'}\n请输出实践指导 JSON。"

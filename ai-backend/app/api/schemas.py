@@ -65,6 +65,7 @@ class ProfessorChatRequest(BaseModel):
 class RetrieveRequest(BaseModel):
     session_id: str
     query: str
+    arxiv_query: Optional[str] = Field(default=None, max_length=200)
     stage_id: Optional[str] = None
     task_id: Optional[str] = None
     top_k: int = 5
@@ -97,3 +98,5 @@ class MemoryRememberRequest(BaseModel):
 class QuestAdvanceRequest(BaseModel):
     session_id: str
     message: Optional[str] = None
+    request_id: Optional[str] = Field(default=None, max_length=80)
+    expected_status: Optional[str] = None

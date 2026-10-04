@@ -86,6 +86,10 @@ export class XUniversityClient {
     return this.request<SessionSnapshot>(`/session/${encodeURIComponent(sessionId)}`);
   }
 
+  async deleteSession(sessionId: string): Promise<{ok: boolean}> {
+    return this.request<{ok: boolean}>(`/session/${encodeURIComponent(sessionId)}`, {method: "DELETE"});
+  }
+
   /** 更新任务状态，驱动场景中任务点亮/解锁 */
   async updateProgress(sessionId: string, taskId: string, status: TaskStatus): Promise<ProgressResult> {
     const body: ProgressInput = { task_id: taskId, status };
@@ -343,6 +347,7 @@ export async function readSseStream(
   onEvent: (event: string, data: unknown) => void,
   signal?: AbortSignal,
 ): Promise<void> {
+  signal?.throwIfAborted();
   if (!resp.body) {
     throw new ApiError(502, "响应没有 body，无法读取流");
   }
@@ -359,11 +364,10 @@ export async function readSseStream(
     dataLines.length = 0;
     eventName = "";
     if (!raw) return;
-    try {
-      onEvent(name, JSON.parse(raw));
-    } catch {
-      // 坏帧直接跳过，不中断流
-    }
+    let parsed: unknown;
+    try { parsed = JSON.parse(raw); }
+    catch { throw new ApiError(502, "Agent 流包含无效数据，请恢复服务端进度"); }
+    onEvent(name, parsed);
   };
 
   const onAbort = () => {
@@ -400,7 +404,10 @@ export async function readSseStream(
       else if (line.startsWith("data:")) dataLines.push(line.slice(5).trim());
       flush();
     }
+    flush();
+    signal?.throwIfAborted();
   } finally {
     signal?.removeEventListener("abort", onAbort);
+    reader.releaseLock();
   }
 }

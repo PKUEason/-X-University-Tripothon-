@@ -10,12 +10,13 @@ import logging
 from typing import Iterator, Optional
 
 from app.agents import librarian
-from app.agents.llm import llm
+from app.agents.llm import llm, EmptyResponseError
 from app.config import settings
 from app.core import prompts
 from app.core.guard import public_error_message
 from app.memory.memory_service import build_memory_block, messages_with_summary, record_struggle
 from app.memory.store import store
+from app.memory.artifacts import context as artifact_context
 from app.mock_data import golden_path as mock
 
 log = logging.getLogger("professor")
@@ -74,7 +75,7 @@ def stream_chat(
     store.add_message(session_id, "user", message, agent="professor", task_id=task_id)
 
     # RAG 检索为纯本地计算、结果确定，mock 与真实模式都使用
-    refs, ref_docs = _gather_references(message, task_title)
+    refs, ref_docs = _gather_references((session.get("goal") or "") + " " + message, task_title)
 
     if settings.mock_mode:
         answer = mock.professor_answer(message, task_title)
@@ -88,6 +89,7 @@ def stream_chat(
         return
 
     context = prompts.build_context_block(session.get("goal"), roadmap, stage_id, task_id)
+    context += "\n[此前空间产物]\n" + artifact_context(session_id)
     memory_block = build_memory_block(session_id)
     task_hint = f"当前正在讲解的任务：{task_title}。" if task_title else "学生尚未指定具体任务。"
     system_msg = (
@@ -104,13 +106,24 @@ def stream_chat(
 
     answer = ""
     try:
-        for delta in llm.stream_text(messages, temperature=0.5, max_tokens=1500):
-            answer += delta
-            yield {"type": "token", "delta": delta}
+        for attempt in range(2):
+            try:
+                for delta in llm.stream_text(messages, temperature=0.5, max_tokens=1500 * (attempt + 1)):
+                    answer += delta
+                    yield {"type": "token", "delta": delta}
+                if not answer.strip():
+                    raise EmptyResponseError("模型未返回回答正文，请重试")
+                break
+            except EmptyResponseError:
+                if attempt:
+                    raise
+                answer = ""
+                log.warning("professor 收到空正文，重试一次")
     except Exception as exc:
         log.warning("professor LLM 调用失败：%s", exc)
         if not settings.fallback_to_mock:
-            store.add_message(session_id, "assistant", answer, agent="professor", task_id=task_id)
+            if answer.strip():
+                store.add_message(session_id, "assistant", answer, agent="professor", task_id=task_id)
             yield {"type": "error", "message": f"AI Professor 暂不可用：{public_error_message(exc)}"}
             yield {"type": "done"}
             return

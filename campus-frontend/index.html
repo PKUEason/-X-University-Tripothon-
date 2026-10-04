@@ -1,0 +1,46 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>X University · Agent 联调</title><link rel="icon" href="data:,"><link rel="stylesheet" href="./style.css"><script type="importmap">{"imports":{"three":"./vendor/three.module.js"}}</script></head><body>
+<main id="world"></main>
+<header><a class="brand" href="./"><b>𝕏</b><span>UNIVERSITY<small>A CAMPUS FOR YOUR CURIOSITY</small></span></a><div class="environment"><span class="dot"></span><span id="mode" class="tag">正在连接 Agent</span></div><div class="campus-actions"><button id="projects-button">我的项目</button><button id="student-button">学生资料</button><button id="settings">设置</button></div></header>
+<section class="quest-card"><div class="eyebrow">CURRENT PROJECT <span id="step-number"></span></div><button id="active-project-name" class="project-heading"></button><h1 id="quest-title">带着一个问题，走进来。</h1><p id="goal-summary"></p><ol id="steps"><li>与 Scholar 确认目标</li><li>Library · 建立知识基础</li><li>Professor · 收敛问题</li><li>X Lab · 形成行动方案</li><li>Project Card · 保存行动计划</li></ol><button class="primary" id="next">提出目标 ↗</button><div id="quest-feedback" role="status"></div><button id="all-tasks-button" hidden>查看全部任务</button></section>
+<aside class="map"><div class="eyebrow">ONE CAMPUS · MANY PROJECTS</div><div class="map-route"><button data-space="gate">Gate</button><button data-space="plaza">Plaza</button><button data-space="library">Library</button><button data-space="office">Professor</button><button data-space="lab">Lab</button></div><p id="location"></p><p id="campus-stamps" aria-label="校园探索记录"></p></aside>
+<div id="hotspot" hidden><button id="interact"><kbd>E</kbd><span id="hotspot-label"></span> ↗</button></div>
+<footer><span><kbd>W A S D</kbd> 移动 · <kbd>Shift</kbd> 奔跑 · 拖动环视 · 滚轮缩放</span><div><button id="agent-button">✳ 当前空间 Agent</button><button id="home">回到校门</button><span id="fps">— FPS</span></div></footer>
+<div class="touch-controls"><button data-move="KeyW" aria-label="向前">↑</button><div><button data-move="KeyA" aria-label="向左">←</button><button data-move="KeyS" aria-label="向后">↓</button><button data-move="KeyD" aria-label="向右">→</button></div></div><div id="toast" role="status"></div>
+<dialog id="agent-panel" aria-labelledby="panel-title">
+  <div class="panel-heading">
+    <div class="eyebrow">CAMPUS CONVERSATION <span class="tag" id="panel-mode"></span></div>
+    <button class="close" aria-label="关闭 Agent 面板">×</button>
+    <h2 id="panel-title"></h2>
+    <div class="panel-meta"><p id="panel-project" class="project-context"></p><span id="panel-stage" class="stage-pill"></span></div>
+  </div>
+  <div id="agent-scroll">
+    <details class="context-drawer" id="project-context-drawer"><summary>本项目的目标与背景</summary><p id="panel-intro"></p></details>
+    <form id="goal-form" class="content-card">
+      <div class="section-kicker">01 / 开始探索</div><h3>先说说你想做的事</h3>
+      <label for="goal">你的目标、已有基础和可投入时间</label>
+      <textarea id="goal" maxlength="1000" required placeholder="例如：我有 Python 基础，每天 1 小时，想在两周内做一个校园导览机器人原型"></textarea>
+      <div class="examples" id="examples"></div><div class="form-bottom"><small>想法不完整也没关系，我们一起梳理。</small><button class="primary" type="submit" id="submit-goal">发送给 Scholar ↗</button></div>
+    </form>
+    <div id="chat-history" aria-label="与当前导师的对话"></div>
+    <div id="response" aria-live="polite"></div><div id="request-status" role="status"></div>
+    <div id="error" role="alert"></div><button id="recover" hidden>恢复服务端进度</button>
+    <div id="knowledge"></div>
+    <section id="next-actions" class="next-actions"><div class="section-kicker">下一步</div>
+      <p id="goal-help" hidden></p><div class="action-buttons"><button id="roadmap-button" hidden>确认目标并生成 Quest 路线 ↗</button>
+      <button id="space-action" class="primary" hidden></button><button id="panel-next" hidden>前往下一站 →</button><button id="export-project" hidden>下载项目行动卡（JSON）</button></div>
+    </section>
+    <div id="task-list"></div>
+  </div>
+  <form id="chat-form" hidden>
+    <div class="composer-heading"><label id="reply-label" for="message">回复 Scholar</label><span>继续本项目的对话</span></div>
+    <p id="reply-context"></p><textarea id="message" maxlength="1500" rows="2" required aria-describedby="reply-context" placeholder="在这里回答上面的问题…"></textarea>
+    <div class="form-bottom"><small>Enter 换行 · ⌘ / Ctrl + Enter 发送</small><button id="send-reply" class="primary" type="submit">发送回复 ↗</button></div>
+  </form>
+  <p class="disclaimer">校园原型 · 行动卡保存计划，任务完成情况由你确认。</p>
+</dialog>
+<dialog id="tasks-panel" aria-labelledby="tasks-title"><button class="close" aria-label="关闭任务清单">×</button><div class="eyebrow">ALL PROJECT TASKS</div><h2 id="tasks-title">全部任务与完成标准</h2><p id="tasks-project" class="project-context"></p><p id="tasks-summary" role="status"></p><p id="tasks-explanation"></p><p id="tasks-error" role="alert"></p><div id="all-tasks"></div></dialog>
+<dialog id="settings-panel"><button class="close" aria-label="关闭设置">×</button><div class="eyebrow">SESSION & CONNECTION</div><h2>校园设置</h2><label for="quality">画质</label><select id="quality"><option value="performance">流畅 · 关闭阴影</option><option value="balanced">标准 · 柔和阴影</option><option value="high">精细 · 更清晰的阴影与边缘</option></select><label for="camera-sensitivity">镜头灵敏度 <output id="sensitivity-value"></output></label><input id="camera-sensitivity" type="range" min="0.5" max="2" step="0.1"><label class="setting-check"><input id="reduce-motion" type="checkbox">减少动态效果</label><button id="reset-camera" type="button">重置镜头（保留位置）</button><button id="reset-preferences" type="button">恢复默认画面设置</button><h3>会话与恢复</h3><p id="save-status"></p><button id="sync-session">恢复服务端进度</button><details><summary>运行诊断</summary><pre id="diagnostics"></pre></details><a href="./credits.html" target="_blank" rel="noopener">原型素材来源</a><button class="danger" id="restart">新建项目</button></dialog>
+<dialog id="student-panel" aria-labelledby="student-title"><div class="eyebrow">YOUR CAMPUS ID</div><h2 id="student-title">先认识一下新同学</h2><p>选一个学生角色，写下你的昵称。接下来，你可以自由探索校园，同时推进自己的多个项目。</p><form id="student-form"><div class="student-layout"><div><div id="student-preview"></div><p class="preview-tip">拖动人物预览，查看正面与书包</p></div><div class="student-fields"><fieldset><legend>选择性别</legend><div class="gender-options"><label><input type="radio" name="gender" value="male" required><span>男生<small>蓝色针织衫 · 书包</small></span></label><label><input type="radio" name="gender" value="female" required><span>女生<small>暖色针织衫 · 书包</small></span></label></div></fieldset><label for="nickname">你的昵称</label><input id="nickname" maxlength="24" required placeholder="你希望大家怎么称呼你？" autocomplete="nickname"><p class="disclaimer">昵称和角色跨项目保留，之后可以修改。</p><p id="profile-error" role="alert"></p><button class="primary" id="enter-campus" type="submit">开始校园活动 →</button><button id="cancel-profile" type="button" hidden>取消</button></div></div></form></dialog>
+<dialog id="delete-project-panel" aria-labelledby="delete-project-title" aria-describedby="delete-project-description"><h2 id="delete-project-title">删除这个项目？</h2><p id="delete-project-name" class="project-context"></p><p id="delete-project-description">将永久删除这个项目的对话、资料、路线和行动方案，无法撤销。其他项目和学生资料会保留。</p><p id="delete-project-error" role="alert"></p><div class="delete-actions"><button id="cancel-delete-project" autofocus>取消，保留项目</button><button id="confirm-delete-project" class="danger">确认删除项目</button></div></dialog>
+<dialog id="projects-panel" aria-labelledby="projects-title"><button class="close" aria-label="关闭我的项目">×</button><div class="eyebrow">YOUR PROJECTS</div><h2 id="projects-title">每个想法，都可以有自己的进度</h2><p>选择当前项目，再去校园中的任何空间。资料、讨论、阶段和行动卡会分别保存。</p><p id="project-busy" role="status"></p><div id="project-list"></div><form id="new-project-form"><label for="project-name">开启另一个项目</label><div class="chat-row"><input id="project-name" required maxlength="60" placeholder="例如：校园导览机器人"><button class="primary" type="submit" id="create-project">新建项目 +</button></div></form><p class="disclaimer">项目列表与学生资料保存在当前浏览器，各项目的 Agent 内容保存在本机后端。</p></dialog>
+<script type="module" src="./src/app.js"></script></body></html>

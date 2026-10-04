@@ -10,6 +10,7 @@ lab_mentor）并透传它们的 SSE 事件；空间切换时插入 quest 事件�
 """
 import json
 import logging
+import threading
 from typing import Any, Iterator, Optional
 
 from app.agents import lab_mentor, librarian, scholar
@@ -18,6 +19,7 @@ from app.config import settings
 from app.core import prompts
 from app.core.guard import public_error_message
 from app.memory.store import store
+from app.memory.artifacts import read_artifact, save_artifact, context as artifact_context
 
 log = logging.getLogger("orchestrator")
 
@@ -87,6 +89,10 @@ def get_quest(session_id: str) -> dict[str, Any]:
         "total_tasks": len(tasks),
         "completed_tasks": done_ids,
         "project": project,
+        "library_result": read_artifact(session_id, "library_result"),
+        "professor_result": read_artifact(session_id, "professor_result"),
+        "lab_result": read_artifact(session_id, "lab_result"),
+        "fallbacks": state.get("fallbacks", []),
     }
 
 
@@ -98,11 +104,13 @@ def generate_project_card(session_id: str) -> dict[str, Any]:
 
     if settings.mock_mode:
         card = dict(_MOCK_PROJECT)
+        card["degraded"] = True
+        card["degraded_reason"] = "MOCK_MODE"
     else:
         try:
             payload = json.dumps(
-                {"goal": goal, "roadmap": roadmap}, ensure_ascii=False
-            )[:6000]
+                {"goal": goal, "stage_results": artifact_context(session_id), "roadmap": roadmap}, ensure_ascii=False
+            )[:18000]
             data = llm.chat_json(
                 [
                     {"role": "system", "content": prompts.PROJECT_CARD_SYSTEM},
@@ -119,16 +127,19 @@ def generate_project_card(session_id: str) -> dict[str, Any]:
                 "next_steps": [str(x) for x in data.get("next_steps", [])][:4],
             }
             if not card["deliverables"]:
-                card["deliverables"] = list(_MOCK_PROJECT["deliverables"])
+                raise ValueError("Project Card 缺少产出物")
         except Exception as exc:
             log.warning("Project Card 生成失败，使用 mock：%s", exc)
             card = dict(_MOCK_PROJECT)
+            card["degraded"] = True
+            card["degraded_reason"] = public_error_message(exc)
 
+    card["artifact_type"] = "project_plan"
     store.remember(session_id, "note", "project_card", json.dumps(card, ensure_ascii=False))
     return card
 
 
-def advance(session_id: str, message: Optional[str] = None) -> Iterator[dict]:
+def _advance(session_id: str, message: Optional[str] = None) -> Iterator[dict]:
     """推进 Quest 一个阶段。事件透传 + quest 状态切换事件。"""
     session = store.get_session(session_id)
     if session is None:
@@ -139,7 +150,7 @@ def advance(session_id: str, message: Optional[str] = None) -> Iterator[dict]:
     status = state.get("quest_status", "created")
 
     # ---- created / clarifying：Scholar 目标澄清 ----
-    if status in ("created", "clarifying"):
+    if status in ("created", "clarifying") or (status == "quest_ready" and message):
         if not message:
             yield {"type": "error", "message": "请先告诉 Scholar Agent 你的学习/研究目标。"}
             return
@@ -150,6 +161,8 @@ def advance(session_id: str, message: Optional[str] = None) -> Iterator[dict]:
             if event["type"] == "ready":
                 ready = bool(event.get("ready"))
             yield event
+            if event["type"] == "error":
+                return
         new_status = "quest_ready" if ready else "clarifying"
         store.update_state(session_id, quest_status=new_status)
         if ready:
@@ -159,8 +172,15 @@ def advance(session_id: str, message: Optional[str] = None) -> Iterator[dict]:
     # ---- quest_ready：生成路线图 ----
     if status == "quest_ready":
         yield _quest_event("quest_ready", "Scholar Agent 正在生成 Quest 路线图…")
+        got_roadmap = False
         for event in scholar.generate_roadmap(session_id):
+            got_roadmap = got_roadmap or event["type"] == "roadmap"
             yield event
+            if event["type"] == "error":
+                return
+        if not got_roadmap:
+            yield {"type": "error", "message": "未收到路线图，阶段未推进"}
+            return
         store.update_state(session_id, quest_status="library")
         yield _quest_event("library", "Quest 已生成，欢迎进入 Library 图书馆！")
         return
@@ -168,8 +188,9 @@ def advance(session_id: str, message: Optional[str] = None) -> Iterator[dict]:
     # ---- library：基于目标检索资料 ----
     if status == "library":
         yield _quest_event("library", "图书馆正在为你调取相关资料…")
-        query = session.get("goal") or "扩散模型文生图"
+        query = librarian.project_query(session_id)
         result = librarian.retrieve(query, top_k=5)
+        save_artifact(session_id, "library_result", result)
         yield {"type": "references", "references": [
             {"title": d["title"], "type": d.get("type", "article"), "url": d.get("url", "")}
             for d in result["documents"] if d.get("url")
@@ -189,8 +210,16 @@ def advance(session_id: str, message: Optional[str] = None) -> Iterator[dict]:
         yield _quest_event("lab", "Lab Mentor 正在生成本任务实践方案…")
         lab_task_id = _first_task_id(store.get_roadmap(session_id), "lab")
         guidance = lab_mentor.generate_guidance(session_id, task_id=lab_task_id)
+        if guidance.get("error"):
+            yield {"type": "error", "message": guidance["error"]}
+            return
+        save_artifact(session_id, "lab_result", guidance)
         yield {"type": "lab_guidance", "guidance": guidance}
+        if guidance.get("degraded"):
+            yield {"type": "fallback", "reason": guidance.get("degraded_reason", "Lab 使用示例方案")}
         project = generate_project_card(session_id)
+        if project.get("degraded"):
+            yield {"type": "fallback", "reason": project.get("degraded_reason", "成果卡使用示例")}
         store.update_state(session_id, quest_status="project_ready")
         yield {"type": "project", "project": project}
         yield _quest_event("project_ready", "恭喜！你的 Project / Research Result 已生成。")
@@ -198,3 +227,42 @@ def advance(session_id: str, message: Optional[str] = None) -> Iterator[dict]:
 
     # ---- project_ready：已完成 ----
     yield _quest_event("project_ready", "Quest 已完成，可查看并导出 Project Card。")
+
+
+# Single-process local demo: serialize each session and replay successful request IDs.
+# A multi-worker deployment must replace this with a database/distributed lock.
+_locks = {}
+_locks_guard = threading.Lock()
+
+
+def advance(session_id, message=None, request_id=None, expected_status=None):
+    with _locks_guard:
+        lock = _locks.setdefault(session_id, threading.Lock())
+    if not lock.acquire(blocking=False):
+        yield {"type": "error", "message": "此会话仍在处理上一请求，请稍后恢复进度"}
+        return
+    try:
+        if request_id:
+            cached = read_artifact(session_id, "request:" + request_id)
+            if cached is not None:
+                yield from cached
+                return
+        current = get_quest(session_id).get("status")
+        if expected_status and current != expected_status:
+            yield {"type": "error", "message": "任务阶段已变化，请恢复进度后继续"}
+            return
+        events = []
+        failed = False
+        for event in _advance(session_id, message):
+            events.append(event)
+            failed = failed or event["type"] == "error"
+            if event["type"] == "fallback":
+                state = store.get_state(session_id)
+                reasons = state.get("fallbacks", [])
+                reason = event.get("reason", "演示数据")
+                store.update_state(session_id, fallbacks=list(dict.fromkeys(reasons + [reason]))[-12:])
+            yield event
+        if request_id and not failed:
+            save_artifact(session_id, "request:" + request_id, events)
+    finally:
+        lock.release()

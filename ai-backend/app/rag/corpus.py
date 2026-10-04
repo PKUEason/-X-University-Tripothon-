@@ -158,3 +158,21 @@ LIBRARY_CORPUS: list[dict] = [
         ),
     },
 ]
+
+# Explicit topic coverage prevents nearest-neighbour search from treating every
+# project as a diffusion-model project. New topics must bring verified sources.
+for _doc in LIBRARY_CORPUS:
+    _doc['topic'] = 'diffusion'
+
+# Source pages checked 2026-10-02; summaries below are original short descriptions.
+LIBRARY_CORPUS.extend([
+    {'title': 'Soft Robotics Toolkit：柔性机器人设计与制作资源', 'type': 'tool',
+     'url': 'https://biodesign.seas.harvard.edu/soft-robotics-toolkit-0', 'topic': 'soft_robotics',
+     'content': '柔性机器人、软体机器人（soft robotics）入门资源。Harvard Biodesign Lab 介绍的 Soft Robotics Toolkit 汇集设计、制造、建模、表征与控制资料。包含执行器、传感器和控制组件的设计文档及可下载文件，可作为小型柔性机器人项目选择实物制作路线的资料入口。'},
+    {'title': 'PneuNets：气动软体弯曲执行器与模具文件', 'type': 'tool',
+     'url': 'https://softroboticstoolkit.com/book/pneunets-downloads', 'topic': 'soft_robotics',
+     'content': '柔性机器人实物原型：PneuNets 气动软体弯曲执行器。官方资源页提供模具的 SolidWorks CAD、可供 3D 打印的 STL、材料清单，以及有限元建模用简化 CAD、STEP 和 Abaqus 输入文件。页面连接设计、制作、建模和测试章节；选择实物路线后应先阅读材料与制作要求。'},
+    {'title': 'SOFA SoftRobots：柔性机器人仿真组件文档', 'type': 'tool',
+     'url': 'https://softrobots.readthedocs.io/en/latest/', 'topic': 'soft_robotics',
+     'content': '柔性机器人、软体机器人仿真：SoftRobots 是 SOFA 的组件插件。官方文档介绍绳索驱动、气动驱动模型，以及末端轨迹定义和微控制器通信工具。可从约束、控制器与计算组件理解仿真场景；这是仿真开发资料入口，不表示已经为当前项目执行了仿真。'},
+])

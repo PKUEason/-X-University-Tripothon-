@@ -119,12 +119,12 @@ PROJECT_CARD_SYSTEM = """你是 X University 的成果总结模块。学生刚�
 严格只输出一个 JSON 对象（不要 Markdown、不要解释），结构：
 {
   "title": "项目名称",
-  "summary": "一段话概述项目做了什么、效果如何，100字以内",
+  "summary": "一段话概述项目计划、研究问题与验证方式，100字以内",
   "deliverables": ["具体产出物，如可运行 Demo / 代码仓库 / 研究报告"],
   "tech_stack": ["用到的框架、模型、工具"],
   "next_steps": ["后续可继续深入的 2-3 个方向"]
 }
-全部中文；产出物必须具体可检验，不要写空话。"""
+全部中文；产出物必须具体可检验，不要写空话。当前系统只生成计划，没有执行实验或代码；不得宣称已实现、已验证效果或产出了可运行代码。deliverables 是计划交付物。"""
 
 
 def build_context_block(goal: str, roadmap: dict | None, stage_id: str | None, task_id: str | None) -> str:

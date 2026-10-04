@@ -45,15 +45,15 @@ def test_rag_returns_relevant_documents(monkeypatch):
         assert set(doc) == {"title", "type", "url", "snippet"}
 
 
-def test_rag_zero_hit_falls_back_to_curated(monkeypatch):
-    """RAG 零命中（生僻 query，含空 query）→ 回退精选语料，空间不空。"""
+def test_rag_unknown_topic_returns_no_unrelated_documents(monkeypatch):
+    """Unsupported projects must not receive the diffusion demo collection."""
     monkeypatch.setattr(settings, "mock_mode", False)
     # 切 bm25 模式：生僻 query 无共同 token 必然零命中（hash 向量兜底可能假阳性）
     monkeypatch.setattr(librarian._hybrid, "mode", "bm25")
     for q in ("", "量子场论烹饪火星菜谱"):
         result = librarian.retrieve(q)
-        assert result["documents"]
-        assert result["engine"] == "curated-v1"
+        assert result["documents"] == []
+        assert "尚未覆盖" in result["notice"]
 
 
 def test_rag_disabled_routes_to_curated(monkeypatch):

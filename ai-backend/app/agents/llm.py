@@ -16,6 +16,10 @@ from app.core.json_utils import extract_json
 log = logging.getLogger("llm")
 
 
+class EmptyResponseError(RuntimeError):
+    """The provider ended a stream without a visible answer."""
+
+
 class LLMClient:
     def __init__(self) -> None:
         self.client = OpenAI(api_key=settings.api_key or "missing-key", base_url=settings.base_url)
@@ -52,12 +56,16 @@ class LLMClient:
 
     def stream_text(self, messages, temperature=0.7, max_tokens=2048) -> Iterator[str]:
         stream = self.chat(messages, temperature=temperature, max_tokens=max_tokens, stream=True)
+        has_text = False
         for chunk in stream:
             if not chunk.choices:
                 continue
             delta = chunk.choices[0].delta
             if delta and delta.content:
+                has_text = has_text or bool(delta.content.strip())
                 yield delta.content
+        if not has_text:
+            raise EmptyResponseError("模型未返回回答正文，请重试")
 
     def chat_json(
         self,

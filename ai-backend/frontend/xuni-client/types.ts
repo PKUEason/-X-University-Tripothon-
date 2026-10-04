@@ -118,6 +118,7 @@ export interface ProfessorChatInput extends SessionOnlyInput {
 
 export interface RetrieveInput extends SessionOnlyInput {
   query: string;
+  arxiv_query?: string;
   stage_id?: string;
   task_id?: string;
   top_k?: number;
@@ -138,6 +139,12 @@ export interface LibraryDocument {
 }
 
 export interface LibraryRetrieveResult {
+  query?: string;
+  retrieval_version?: number;
+  coverage?: string[];
+  arxiv_status?: 'ok' | 'failed' | 'disabled' | 'mock' | 'needs_query';
+  arxiv_query?: string;
+  arxiv_papers?: {title: string; authors: string[]; year: string; url: string; snippet: string}[];
   documents: LibraryDocument[];
   engine: string;
   notice: string;
@@ -239,6 +246,9 @@ export interface ProfessorHandlers {
 // ---------------- Project Card（Quest 最终成果） ----------------
 
 export interface ProjectCard {
+  artifact_type?: "project_plan";
+  degraded?: boolean;
+  degraded_reason?: string;
   title: string;
   summary: string;
   deliverables: string[];
@@ -266,9 +276,15 @@ export interface QuestStatusResult {
   total_tasks: number;
   completed_tasks: string[];
   project: ProjectCard | null;
+  library_result?: LibraryRetrieveResult | null;
+  professor_result?: { question: string; answer: string; references: Resource[]; task_id?: string; degraded: boolean } | null;
+  lab_result?: LabGuidanceResult | null;
+  fallbacks?: string[];
 }
 
 export interface QuestAdvanceInput {
+  request_id?: string;
+  expected_status?: string;
   session_id: string;
   /** created/clarifying 阶段必填：学生说的话 */
   message?: string;

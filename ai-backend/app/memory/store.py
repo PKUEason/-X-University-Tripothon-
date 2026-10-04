@@ -95,6 +95,12 @@ class Store:
         row = self.conn.execute("SELECT * FROM sessions WHERE session_id=?", (sid,)).fetchone()
         return dict(row) if row else None
 
+    def delete_session(self, sid: str) -> None:
+        """Remove one project's records atomically; repeated deletion is harmless."""
+        with self._lock, self.conn:
+            for table in ("messages", "roadmaps", "memories", "summaries", "sessions"):
+                self.conn.execute(f"DELETE FROM {table} WHERE session_id=?", (sid,))
+
     def set_goal(self, sid: str, goal: str) -> None:
         with self._lock:
             self.conn.execute(

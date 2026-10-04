@@ -7,10 +7,13 @@
 ```
 .
 ├── ai-backend/          # AI 后端（FastAPI + DeepSeek + SSE + 记忆 + Mock 降级）← AI 侧
+├── campus-frontend/     # Three.js 校园 + 真实 Agent 联调入口
 ├── ...（其他模块由对应成员建立：3D 前端 / 设计 / 文档 等）
 ```
 
 ## ai-backend 快速开始
+
+3D 场景接入版：[启动与体验说明](campus-frontend/README.md)。完成依赖安装后，在根目录运行 `npm --prefix campus-frontend run dev`，打开 http://127.0.0.1:4176 。
 
 ```bash
 cd ai-backend
