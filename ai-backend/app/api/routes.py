@@ -27,6 +27,14 @@ router = APIRouter()
 _activity_lock = threading.Lock()
 _active_sessions: dict[str, int] = {}
 
+# /api/memory 不暴露的内部 key：artifact 产物、project_card、request 幂等缓存。
+# 这些是 Agent 间协作的内部实现，前端应通过 /api/quest 或专用端点读取，不应直接看到原始 JSON。
+_INTERNAL_MEMORY_KEYS = frozenset({"library_result", "professor_result", "lab_result", "project_card"})
+
+
+def _is_internal_memory_key(key: str) -> bool:
+    return key in _INTERNAL_MEMORY_KEYS or key.startswith("request:")
+
 
 @contextmanager
 def _using_session(session_id: str):
@@ -99,7 +107,10 @@ def update_progress(session_id: str, body: ProgressRequest):
 @router.get("/memory")
 def recall_memory(session_id: str, kind: str | None = None, key: str | None = None):
     _require_session(session_id)
-    return {"memories": store.recall(session_id, kind=kind, key=key)}
+    memories = store.recall(session_id, kind=kind, key=key)
+    # 过滤内部实现细节（artifact / project_card / request 缓存），只暴露用户级记忆
+    memories = [m for m in memories if not _is_internal_memory_key(m.get("key", ""))]
+    return {"memories": memories}
 
 
 @router.post("/memory/remember")
@@ -134,7 +145,7 @@ def library_retrieve(body: RetrieveRequest):
         store.add_message(body.session_id, "user", f"[Library 检索] {query}", agent="librarian")
         store.add_message(
             body.session_id, "assistant",
-            f"[Library 检索结果] 共 {len(result['documents'])} 条资料", agent="librarian",
+            f"[Library 检索结果] 共 {len(result['results'])} 条资料", agent="librarian",
         )
         return result
 
@@ -170,7 +181,10 @@ def professor_chat(body: ProfessorChatRequest):
 def lab_guidance(body: LabRequest):
     with _using_session(body.session_id):
         _require_session(body.session_id)
-        return lab_mentor.generate_guidance(body.session_id, body.stage_id, body.task_id)
+        result = lab_mentor.generate_guidance(body.session_id, body.stage_id, body.task_id)
+        if "error" in result:
+            raise HTTPException(502, result["error"])
+        return result
 
 
 # ---------------- Quest 编排（多 Agent） ----------------
@@ -194,4 +208,5 @@ def delete_session(session_id: str):
         if _active_sessions.get(session_id):
             raise HTTPException(409, "该项目正在处理请求，请等回复完成后再删除。")
         store.delete_session(session_id)
+        orchestrator.cleanup_session_locks(session_id)
     return {"ok": True}

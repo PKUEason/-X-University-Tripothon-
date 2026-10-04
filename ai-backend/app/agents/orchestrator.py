@@ -75,11 +75,14 @@ def get_quest(session_id: str) -> dict[str, Any]:
     done_ids = [t.get("id") for t in tasks if t.get("status") == "done"]
 
     project = None
-    row = store.recall(session_id, kind="note", key="project_card")
+    rows = store.recall(session_id, kind="note", key="project_card")
+    # recall 同时返回会话记忆与全局记忆（全局在前），project_card 必须只取当前会话的，
+    # 否则全局记忆会被误当成项目卡。
+    row = next((r for r in rows if r.get("session_id") == session_id), None)
     if row:
         try:
-            project = json.loads(row[0]["content"])
-        except (ValueError, IndexError):
+            project = json.loads(row["content"])
+        except (ValueError, TypeError):
             project = None
 
     return {
@@ -193,7 +196,7 @@ def _advance(session_id: str, message: Optional[str] = None) -> Iterator[dict]:
         save_artifact(session_id, "library_result", result)
         yield {"type": "references", "references": [
             {"title": d["title"], "type": d.get("type", "article"), "url": d.get("url", "")}
-            for d in result["documents"] if d.get("url")
+            for d in result["results"] if d.get("url")
         ]}
         store.update_state(session_id, quest_status="professor")
         yield _quest_event("professor", "资料已就绪，前往 Professor Office 与 AI Professor 研讨。")
@@ -235,6 +238,12 @@ _locks = {}
 _locks_guard = threading.Lock()
 
 
+def cleanup_session_locks(session_id: str) -> None:
+    """会话删除时回收其锁，避免 _locks 只增不减。"""
+    with _locks_guard:
+        _locks.pop(session_id, None)
+
+
 def advance(session_id, message=None, request_id=None, expected_status=None):
     with _locks_guard:
         lock = _locks.setdefault(session_id, threading.Lock())
@@ -264,5 +273,6 @@ def advance(session_id, message=None, request_id=None, expected_status=None):
             yield event
         if request_id and not failed:
             save_artifact(session_id, "request:" + request_id, events)
+            store.cleanup_request_cache(session_id, keep=10)
     finally:
         lock.release()

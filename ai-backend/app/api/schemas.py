@@ -68,7 +68,7 @@ class RetrieveRequest(BaseModel):
     arxiv_query: Optional[str] = Field(default=None, max_length=200)
     stage_id: Optional[str] = None
     task_id: Optional[str] = None
-    top_k: int = 5
+    top_k: int = Field(default=5, ge=1, le=20, description="返回资料条数，1-20")
 
 
 class LabRequest(BaseModel):

@@ -55,12 +55,28 @@ def test_double_angle_brackets_that_are_not_the_marker():
     assert out == text
 
 
-def test_ready_defaults_to_false_when_stream_truncated():
-    """流被截断在 `<<<` 处，不应误判为 ready。"""
+def test_ready_stays_none_when_marker_truncated_halfway():
+    """流被截断在 `<<<`（半个前缀），ready 保持 None，让上层 _heuristic_ready 兜底。"""
     f = _MarkerFilter()
     f.feed("好的。<<<")
     assert f.flush() == ""
-    assert f.ready is False
+    assert f.ready is None
+
+
+def test_ready_parsed_when_marker_value_truncated():
+    """流被截断在 `<<<READY:true`（已写 MARKER 但缺 >>>），flush 时解析出 true。"""
+    f = _MarkerFilter()
+    f.feed("好的。<<<READY:true")
+    assert f.flush() == ""
+    assert f.ready is True
+
+
+def test_ready_stays_none_when_marker_value_empty():
+    """流被截断在 `<<<READY:`（已写 MARKER 但没写值），保持 None 不瞎猜。"""
+    f = _MarkerFilter()
+    f.feed("好的。<<<READY:")
+    assert f.flush() == ""
+    assert f.ready is None
 
 
 # ---------------- _normalize_roadmap ----------------

@@ -6,6 +6,14 @@ from app.agents import librarian
 from app.config import settings
 from app.rag import arxiv as arxiv_client
 
+
+def _local(result):
+    return [r for r in result["results"] if r["source"] == "local"]
+
+
+def _arxiv(result):
+    return [r for r in result["results"] if r["source"] == "arxiv"]
+
 SAMPLE_ATOM = """<?xml version="1.0" encoding="UTF-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom">
   <title>ArXiv Query Results</title>
@@ -99,9 +107,9 @@ def test_librarian_mock_is_explicit_and_never_fills_other_topics(monkeypatch):
     monkeypatch.setattr(settings, 'arxiv_enabled', True)
     result = librarian.retrieve('AI 硬件', top_k=3)
     assert set(librarian.CONTRACT_KEYS) == set(result)
-    assert result['arxiv_status'] == 'mock'
-    assert result['arxiv_papers'] == []
-    assert result['documents'] == []
+    assert result['sources']['arxiv'] == 'mock'
+    assert _arxiv(result) == []
+    assert _local(result) == []
 
 
 def test_librarian_arxiv_failure_degrades(monkeypatch):
@@ -114,9 +122,9 @@ def test_librarian_arxiv_failure_degrades(monkeypatch):
 
     monkeypatch.setattr(arxiv_client, "search_arxiv", boom)
     result = librarian.retrieve("diffusion", top_k=3)
-    assert result["arxiv_papers"] == []
-    assert result["arxiv_status"] == "failed"
-    assert len(result["documents"]) > 0  # 本地 hybrid 正常
+    assert _arxiv(result) == []
+    assert result["sources"]["arxiv"] == "failed"
+    assert len(_local(result)) > 0  # 本地 hybrid 正常
     assert "arXiv 检索不可用" in result["notice"]
 
 
@@ -124,8 +132,8 @@ def test_librarian_arxiv_disabled(monkeypatch):
     monkeypatch.setattr(settings, "mock_mode", False)
     monkeypatch.setattr(settings, "arxiv_enabled", False)
     result = librarian.retrieve("diffusion", top_k=3)
-    assert result["arxiv_status"] == "disabled"
-    assert result["arxiv_papers"] == []
+    assert result["sources"]["arxiv"] == "disabled"
+    assert _arxiv(result) == []
 
 
 def test_search_documents_excludes_arxiv():
@@ -153,20 +161,20 @@ def test_uncovered_local_topic_still_searches_arxiv_and_persists_per_project(cli
         response = client.post('/api/library/retrieve', json={'session_id': sid, 'query': ''})
         assert response.status_code == 200
         result = response.json()
-        assert result['arxiv_status'] == 'ok'
-        assert result['documents'] == []
-        assert result['arxiv_papers'][0]['title'] == result['arxiv_query']
+        assert result['sources']['arxiv'] == 'ok'
+        assert _local(result) == []
+        assert _arxiv(result)[0]['title'] == result['arxiv_query']
         assert read_artifact(sid, 'library_result') == result
         assert store.get_state(sid)['quest_status'] == 'professor'
     assert queries == ['TinyML, embedded machine learning', 'robot vision']
-    assert read_artifact(ids[0], 'library_result')['arxiv_papers'][0]['title'] == 'TinyML, embedded machine learning'
+    assert _arxiv(read_artifact(ids[0], 'library_result'))[0]['title'] == 'TinyML, embedded machine learning'
 
 
 def test_empty_results_are_success_not_failure(monkeypatch):
     monkeypatch.setattr(settings, 'mock_mode', False)
     monkeypatch.setattr(settings, 'arxiv_enabled', True)
     monkeypatch.setattr(arxiv_client, 'search_arxiv', lambda *a, **kw: [])
-    assert librarian.retrieve('AI 硬件')['arxiv_status'] == 'ok'
+    assert librarian.retrieve('AI 硬件')['sources']['arxiv'] == 'ok'
 
 
 def test_professor_does_not_trigger_external_search(monkeypatch):
@@ -214,8 +222,8 @@ def test_unmapped_chinese_query_does_not_match_generic_ai(monkeypatch):
     monkeypatch.setattr(settings, 'arxiv_enabled', True)
     monkeypatch.setattr(arxiv_client, 'search_arxiv', lambda *a, **kw: pytest.fail('must request keywords first'))
     result = librarian.retrieve('我想学植物种植')
-    assert result['arxiv_status'] == 'needs_query'
-    assert result['arxiv_papers'] == []
+    assert result['sources']['arxiv'] == 'needs_query'
+    assert _arxiv(result) == []
 
 
 def test_manual_paper_query_preserves_original_project_and_stage(client, monkeypatch):

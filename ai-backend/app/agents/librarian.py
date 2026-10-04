@@ -14,10 +14,11 @@ from app.rag.corpus import LIBRARY_CORPUS
 from app.rag.embeddings import build_provider
 from app.rag.hybrid import HybridRetriever
 from app.memory.store import store
+from app.services import web_search
 
 RAG_ENABLED = True
-RETRIEVAL_VERSION = 3
-CONTRACT_KEYS = ('documents', 'engine', 'notice', 'query', 'retrieval_version', 'coverage', 'arxiv_papers', 'arxiv_status', 'arxiv_query')
+RETRIEVAL_VERSION = 4
+CONTRACT_KEYS = ('query', 'retrieval_version', 'coverage', 'engine', 'notice', 'results', 'sources', 'arxiv_query')
 _embedding_provider = build_provider()
 _hybrid = HybridRetriever(provider=_embedding_provider, mode=settings.rag_mode)
 TOPICS = {
@@ -39,7 +40,7 @@ def _retrieve_local(query: str, top_k: int = 5, *, force_search: bool = False) -
     base = {'query': query, 'retrieval_version': RETRIEVAL_VERSION, 'coverage': sorted(topics)}
     if not eligible:
         return {**base, 'documents': [], 'engine': 'local-collection',
-                'notice': '当前资料库尚未覆盖这个项目方向，未找到可推荐的资料。不会用其他项目的文献填充；本地库目前仅覆盖扩散模型与柔性机器人入门资料。下方 arXiv 论文独立检索，尚不包含网页教程。'}
+                'notice': '当前资料库尚未覆盖这个项目方向，未找到可推荐的本地资料。不会用其他项目的文献填充；本地库目前仅覆盖扩散模型与柔性机器人入门资料。arXiv 论文和联网搜索会独立检索，与本地资料合并展示。'}
     allowed = {d['url'] for d in eligible}
     if (settings.mock_mode and not force_search) or not RAG_ENABLED:
         documents = mock.library_docs(query, top_k=top_k) if topics == {'diffusion'} else [
@@ -55,13 +56,74 @@ def _retrieve_local(query: str, top_k: int = 5, *, force_search: bool = False) -
 
 
 def retrieve(query: str, top_k: int = 5, *, force_search: bool = False, arxiv_query: str | None = None) -> dict[str, Any]:
-    result = _retrieve_local(query, top_k, force_search=force_search)
+    """统一检索：自动从本地资料 + arXiv + 联网三路搜索，合并去重后返回单一 results 列表。
+
+    每条结果标注 source（local / arxiv / web），前端无需分区展示。
+    各路独立降级，任何一路失败不阻塞其他路；sources 字段记录每路状态。
+    """
+    local = _retrieve_local(query, top_k, force_search=force_search)
     terms = arxiv_query.strip() if arxiv_query is not None else arxiv_client.suggested_terms(query)
-    result['arxiv_query'] = terms
-    result['arxiv_papers'], result['arxiv_status'] = _fetch_arxiv(terms)
-    if result['arxiv_status'] == 'failed':
-        result['notice'] += ' arXiv 检索不可用，请稍后重试。'
-    return result
+    arxiv_papers, arxiv_status = _fetch_arxiv(terms)
+    web_results, web_status = _fetch_web(query)
+
+    # 合并三路，按 url 去重，顺序：本地 → arXiv → 联网
+    results: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for doc in local['documents']:
+        url = doc.get('url', '')
+        if not url or url in seen:
+            continue
+        seen.add(url)
+        results.append({
+            'title': doc.get('title', ''),
+            'url': url,
+            'snippet': doc.get('snippet', ''),
+            'source': 'local',
+            'type': doc.get('type', 'doc'),
+        })
+    for paper in arxiv_papers:
+        url = paper.get('url', '')
+        if not url or url in seen:
+            continue
+        seen.add(url)
+        results.append({
+            'title': paper.get('title', ''),
+            'url': url,
+            'snippet': paper.get('snippet') or paper.get('summary', ''),
+            'source': 'arxiv',
+            'type': 'paper',
+            'authors': paper.get('authors', []),
+            'year': paper.get('year', ''),
+        })
+    for web in web_results:
+        url = web.get('url', '')
+        if not url or url in seen:
+            continue
+        seen.add(url)
+        results.append({
+            'title': web.get('title', ''),
+            'url': url,
+            'snippet': web.get('content', ''),
+            'source': 'web',
+            'type': 'webpage',
+        })
+
+    notice = local['notice']
+    if arxiv_status == 'failed':
+        notice += ' arXiv 检索不可用，请稍后重试。'
+    if web_status == 'failed':
+        notice += ' 联网搜索不可用，请稍后重试。'
+
+    return {
+        'query': local['query'],
+        'retrieval_version': RETRIEVAL_VERSION,
+        'coverage': local['coverage'],
+        'engine': local['engine'],
+        'notice': notice,
+        'results': results,
+        'sources': {'local': 'ok', 'arxiv': arxiv_status, 'web': web_status},
+        'arxiv_query': terms,
+    }
 
 
 def _fetch_arxiv(query: str) -> tuple[list[dict[str, Any]], str]:
@@ -77,6 +139,24 @@ def _fetch_arxiv(query: str) -> tuple[list[dict[str, Any]], str]:
                                         timeout=settings.arxiv_timeout), 'ok'
     except Exception:
         logging.getLogger(__name__).warning('arXiv search unavailable')
+        return [], 'failed'
+
+
+def _fetch_web(query: str) -> tuple[list[dict[str, Any]], str]:
+    """联网搜索（Bing RSS 默认，免费无 key）。失败降级空结果，不阻塞 Library。"""
+    if not settings.web_search_enabled:
+        return [], 'disabled'
+    if settings.mock_mode:
+        return [], 'mock'
+    if not query or not query.strip():
+        return [], 'needs_query'
+    try:
+        results, provider = web_search.search(query, max_results=settings.web_search_max_results)
+        if provider == 'mock':
+            return [], 'failed'  # provider 降级到 mock 说明真实搜索失败
+        return results, 'ok'
+    except Exception:
+        logging.getLogger(__name__).warning('web search unavailable')
         return [], 'failed'
 
 

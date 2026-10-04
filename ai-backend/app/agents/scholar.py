@@ -109,8 +109,19 @@ class _MarkerFilter:
     def flush(self) -> str:
         buf = self.buf
         if buf.startswith("<<<"):
-            if self.MARKER.startswith(buf[: len(buf)]):
-                self.ready = self.ready if self.ready is not None else False
+            if buf.startswith(self.MARKER):
+                # 已写 "<<<READY:" 但被截断在 ">>>" 之前：尝试解析 true/false，
+                # 解析不到则保持原有 ready 值（可能是 None），让上层 _heuristic_ready 兜底。
+                content = buf[len(self.MARKER):].lower()
+                if "true" in content:
+                    self.ready = True
+                elif "false" in content:
+                    self.ready = False
+                self.buf = ""
+                return ""
+            if self.MARKER.startswith(buf):
+                # 只是 "<<<READ" 这样的半个前缀：不设置 ready，保持 None，
+                # 让上层走 _heuristic_ready 启发式判断。仅丢弃文本，不泄漏标记。
                 self.buf = ""
                 return ""
         self.buf = ""
@@ -163,6 +174,10 @@ def stream_clarify(session_id: str, message: str) -> Iterator[dict]:
             reply_text += tail
             yield {"type": "token", "delta": tail}
         ready = marker.ready
+        if ready is None:
+            # 模型没输出 <<<READY:>>> 标记时（实测 deepseek-flash 偶尔不遵守），
+            # 用启发式判断目标是否已足够清晰，避免前端永远等不到 ready 信号。
+            ready = _heuristic_ready(message, reply_text)
     except Exception as exc:  # 网络/余额/超时等
         log.warning("clarify LLM 调用失败：%s", exc)
         if not settings.fallback_to_mock:
