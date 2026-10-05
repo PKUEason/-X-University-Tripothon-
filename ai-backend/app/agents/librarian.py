@@ -15,6 +15,7 @@ from app.rag.embeddings import build_provider
 from app.rag.hybrid import HybridRetriever
 from app.memory.store import store
 from app.services import web_search
+from app.services import resource_scout
 
 RAG_ENABLED = True
 RETRIEVAL_VERSION = 4
@@ -65,6 +66,7 @@ def retrieve(query: str, top_k: int = 5, *, force_search: bool = False, arxiv_qu
     terms = arxiv_query.strip() if arxiv_query is not None else arxiv_client.suggested_terms(query)
     arxiv_papers, arxiv_status = _fetch_arxiv(terms)
     web_results, web_status = _fetch_web(query)
+    resource_results, resource_status = _fetch_resources(query)
 
     # 合并三路，按 url 去重，顺序：本地 → arXiv → 联网
     results: list[dict[str, Any]] = []
@@ -107,6 +109,18 @@ def retrieve(query: str, top_k: int = 5, *, force_search: bool = False, arxiv_qu
             'source': 'web',
             'type': 'webpage',
         })
+    for res in resource_results:
+        url = res.get('url', '')
+        if not url or url in seen:
+            continue
+        seen.add(url)
+        results.append({
+            'title': res.get('title', ''),
+            'url': url,
+            'snippet': res.get('snippet', ''),
+            'source': res.get('source', 'resource'),
+            'type': res.get('type', 'resource'),
+        })
 
     notice = local['notice']
     if arxiv_status == 'failed':
@@ -121,7 +135,7 @@ def retrieve(query: str, top_k: int = 5, *, force_search: bool = False, arxiv_qu
         'engine': local['engine'],
         'notice': notice,
         'results': results,
-        'sources': {'local': 'ok', 'arxiv': arxiv_status, 'web': web_status},
+        'sources': {'local': 'ok', 'arxiv': arxiv_status, 'web': web_status, 'resource': resource_status},
         'arxiv_query': terms,
     }
 
@@ -157,6 +171,22 @@ def _fetch_web(query: str) -> tuple[list[dict[str, Any]], str]:
         return results, 'ok'
     except Exception:
         logging.getLogger(__name__).warning('web search unavailable')
+        return [], 'failed'
+
+
+def _fetch_resources(query: str) -> tuple[list[dict[str, Any]], str]:
+    """资源推荐：搜索课程视频 + 书籍。失败降级空结果，不阻塞 Library。"""
+    if not settings.web_search_enabled:
+        return [], 'disabled'
+    if settings.mock_mode:
+        return [], 'mock'
+    if not query or not query.strip():
+        return [], 'needs_query'
+    try:
+        results, status = resource_scout.scout(query)
+        return results, status
+    except Exception:
+        logging.getLogger(__name__).warning('resource scout unavailable')
         return [], 'failed'
 
 

@@ -122,18 +122,21 @@ def test_library_endpoint_in_live_mode(client, session, monkeypatch):
 # ---------------- 统一合并 / 去重 ----------------
 
 def test_results_merged_from_all_sources(monkeypatch):
-    """三路结果合并到单一 results 列表，各自标注 source。"""
+    """四路结果合并到单一 results 列表，各自标注 source。"""
     monkeypatch.setattr(settings, "mock_mode", False)
     fake_arxiv = [{"title": "ArXiv Paper", "url": "https://arxiv.org/abs/1234.5678",
                     "snippet": "arxiv abstract", "authors": ["A"], "year": "2024"}]
     fake_web = [{"title": "Web Tutorial", "url": "https://example.com/tut", "content": "web content"}]
+    fake_resources = [{"title": "B站课程", "url": "https://www.bilibili.com/video/BV1xx", "snippet": "video course", "type": "course", "source": "course"}]
     monkeypatch.setattr(librarian, "_fetch_arxiv", lambda q: (fake_arxiv, "ok"))
     monkeypatch.setattr(librarian, "_fetch_web", lambda q: (fake_web, "ok"))
+    monkeypatch.setattr(librarian, "_fetch_resources", lambda q: (fake_resources, "ok"))
     result = librarian.retrieve("diffusion model", top_k=2)
     sources = {r["source"] for r in result["results"]}
     assert "local" in sources
     assert "arxiv" in sources
     assert "web" in sources
+    assert "course" in sources
     # arxiv 条目带 authors/year
     arxiv_item = _by_source(result, "arxiv")[0]
     assert arxiv_item["authors"] == ["A"]
@@ -143,6 +146,10 @@ def test_results_merged_from_all_sources(monkeypatch):
     web_item = _by_source(result, "web")[0]
     assert web_item["type"] == "webpage"
     assert web_item["snippet"] == "web content"
+    # course 条目
+    course_item = _by_source(result, "course")[0]
+    assert course_item["type"] == "course"
+    assert result["sources"]["resource"] == "ok"
 
 
 def test_duplicate_urls_deduplicated(monkeypatch):
@@ -171,10 +178,12 @@ def test_sources_records_each_channel_status(monkeypatch):
     monkeypatch.setattr(settings, "mock_mode", False)
     monkeypatch.setattr(librarian, "_fetch_arxiv", lambda q: ([], "failed"))
     monkeypatch.setattr(librarian, "_fetch_web", lambda q: ([], "disabled"))
+    monkeypatch.setattr(librarian, "_fetch_resources", lambda q: ([], "ok"))
     result = librarian.retrieve("DDPM")
     assert result["sources"]["local"] == "ok"
     assert result["sources"]["arxiv"] == "failed"
     assert result["sources"]["web"] == "disabled"
+    assert result["sources"]["resource"] == "ok"
     assert "arXiv 检索不可用" in result["notice"]
 
 
