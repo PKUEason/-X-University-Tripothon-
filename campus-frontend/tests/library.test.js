@@ -31,3 +31,7 @@ test('editable paper keywords submit without changing the goal and disable durin
  body.replaceChildren();renderLibrary(body,result({arxiv_status:'needs_query'}),{busy:true,onSearch(){throw Error('must not submit');}});assert.ok(body.querySelector('input').disabled);assert.ok(body.querySelector('button').disabled);assert.match(body.textContent,/填写英文主题/);
  }finally{await w.happyDOM.close();}
 });
+
+test('v4 renders unified local, paper, web and learning resources with honest source status',async()=>{
+ const w=new Window();try{renderLibrary(w.document.body,{retrieval_version:4,query:'TinyML',notice:'统一检索',sources:{local:'ok',arxiv:'ok',web:'ok',resource:'partial'},results:[{source:'arxiv',type:'paper',title:'Paper',url:'https://arxiv.org/abs/1234',authors:['Alice'],year:'2026'},{source:'web',type:'webpage',title:'Tutorial',url:'https://example.com'},{source:'course',type:'course',title:'Course',url:'https://example.com/course'},{source:'book',type:'book',title:'Book',url:'javascript:bad()'}]});assert.equal(w.document.querySelectorAll('.knowledge-node').length,4);assert.equal(w.document.querySelectorAll('a').length,3);assert.match(w.document.body.textContent,/课程与书籍 · 部分可用/);assert.match(w.document.body.textContent,/Alice/);assert.doesNotMatch(w.document.body.textContent,/暂不搜索网页教程/);}finally{await w.happyDOM.close();}
+});

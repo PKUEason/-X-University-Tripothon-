@@ -55,3 +55,8 @@ test('latest assistant questions become a reply card; old answers stay expandabl
 test('streamed assistant Markdown uses the same rendering and leaves the composer present',async()=>{
  const f=fixture(),$=s=>f.document.querySelector(s);f.session.state.goal='测试目标';f.session.busy=true;f.session.stream='**建议**：先做仿真。';f.ui.render();assert.equal($('#response strong').textContent,'建议');assert.equal($('#chat-form').hidden,false);assert.equal($('#message').disabled,true);f.session.busy=false;f.ui.render();assert.equal($('#message').disabled,false);await f.window.happyDOM.close();
 });
+
+test('both composers send on Enter, preserve Shift+Enter, and ignore IME confirmation and key repeat',async()=>{
+ const f=fixture();for(const [selector,form] of [['#goal','#goal-form'],['#message','#chat-form']]){let sends=0;f.document.querySelector(form).requestSubmit=()=>sends++;const input=f.document.querySelector(selector);
+ for(const event of [{key:'Enter',shiftKey:true},{key:'Enter',isComposing:true},{key:'Enter',keyCode:229},{key:'Enter',repeat:true}])input.onkeydown({...event,preventDefault(){}});assert.equal(sends,0);let prevented=false;input.onkeydown({key:'Enter',preventDefault(){prevented=true;}});assert.equal(sends,1);assert.ok(prevented);f.session.busy=true;input.onkeydown({key:'Enter',preventDefault(){}});assert.equal(sends,1);f.session.busy=false;}await f.window.happyDOM.close();
+});

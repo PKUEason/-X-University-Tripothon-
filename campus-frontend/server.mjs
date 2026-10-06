@@ -7,7 +7,7 @@ const root=path.dirname(fileURLToPath(import.meta.url));
 // Load only local backend configuration; no credential is emitted or served.
 try{process.loadEnvFile(path.join(root,'../ai-backend/.env'));}catch{}
 const backend=process.env.XUNI_BACKEND_URL??'http://127.0.0.1:8000';
-const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.glb':'model/gltf-binary','.jpg':'image/jpeg','.svg':'image/svg+xml','.json':'application/json'};
+const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.glb':'model/gltf-binary','.jpg':'image/jpeg','.png':'image/png','.svg':'image/svg+xml','.json':'application/json'};
 const port=Number(process.env.CAMPUS_PORT??4176);
 http.createServer(async(req,res)=>{
  try{
@@ -25,7 +25,7 @@ http.createServer(async(req,res)=>{
    return;
   }
   let p=decodeURIComponent(url.pathname);if(p==='/')p='/index.html';
-  const allowed=p==='/index.html'||p==='/style.css'||/^\/src\/[a-zA-Z0-9-]+\.js$/.test(p)||p==='/credits.html'||/^\/(assets|vendor)\/[a-zA-Z0-9_.-]+$/.test(p);
+  const allowed=p==='/index.html'||p==='/style.css'||p==='/glass.css'||/^\/src\/[a-zA-Z0-9-]+\.js$/.test(p)||p==='/credits.html'||/^\/(assets|vendor)\/(?:figma\/)?[a-zA-Z0-9_.-]+$/.test(p);
   if(!allowed)throw Error('not found');
   const base=/^\/(assets|vendor)\//.test(p)||p==='/credits.html'?path.join(root,'public'):root;
   const file=path.resolve(base,'.'+p);if(!file.startsWith(base+path.sep)||!(await stat(file)).isFile())throw Error('not found');

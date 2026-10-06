@@ -1,3 +1,4 @@
+import {normalizeRole,IDENTITIES} from './identity.js';
 import {XUniversityClient} from './sdk.js';
 export const LEGACY_STORAGE_KEY='xuni-connected-campus-v1';
 export const STORAGE_KEY='xuni-campus-workspace-v2';
@@ -12,7 +13,7 @@ export class ConnectedSession{
    const saved=JSON.parse(storage.getItem(STORAGE_KEY)||'null');
    if(saved?.version===2&&Array.isArray(saved.projects)){
     this.projects=saved.projects.filter(p=>p.projectId&&p.quest).map(p=>({...initial(),...p}));
-    if(saved.profile?.nickname&&['male','female'].includes(saved.profile.gender))this.profile=saved.profile;
+    if(saved.profile?.nickname&&['male','female'].includes(saved.profile.gender))this.profile={...saved.profile,role:normalizeRole(saved.profile.role)};
     this.state=this.projects.find(p=>p.projectId===saved.activeProjectId)??this.projects[0]??initial();
    }
    if(!this.state){const legacy=JSON.parse(storage.getItem(LEGACY_STORAGE_KEY)||'null');this.state=legacy?.sessionId&&legacy.quest?{...initial(),...legacy,title:legacy.goal?.slice(0,32)||'原有项目'}:initial();this.projects=[this.state];}
@@ -24,7 +25,7 @@ export class ConnectedSession{
   try{this.storage.setItem(STORAGE_KEY,JSON.stringify({version:2,profile:this.profile,activeProjectId:this.state.projectId,projects:this.projects}));}catch{}
  }
  changed(){this.persist();this.onChange();}
- setProfile({nickname,gender}){nickname=nickname.trim();if(!nickname||nickname.length>24||!['male','female'].includes(gender))throw Error('请填写 1–24 字的昵称，并选择男生或女生。');this.profile={nickname,gender};this.changed();}
+ setProfile({nickname,gender,role=this.profile?.role??'learner'}){nickname=nickname.trim();if(!nickname||nickname.length>24||!['male','female'].includes(gender))throw Error('请填写 1–24 字的昵称，并选择男生或女生。');if(!Object.hasOwn(IDENTITIES,role))throw Error('请选择学习者、教导者或共建者。');this.profile={nickname,gender,role};this.changed();}
  newProject(title){if(this.busy)return false;this.persist();const {position,spaceId}=this.state;this.state={...initial(),title:title.trim()||'新项目',position:{...position},spaceId};this.projects.push(this.state);this.error='';this.stream='';this.changed();return true;}
  async deleteProject(id){
   if(this.busy)return false;
@@ -41,9 +42,17 @@ export class ConnectedSession{
   finally{this.busy=false;this.status='';this.changed();}
  }
  switchProject(id){if(this.busy)return false;const project=this.projects.find(p=>p.projectId===id);if(!project)return false;this.persist();const {position,spaceId}=this.state;this.state=project;this.state.position={...position};this.state.spaceId=spaceId;this.error='';this.stream='';this.changed();return true;}
- async sync(){if(!this.state.sessionId)return;const snapshot=await this.client.getSession(this.state.sessionId);const quest=await this.client.getQuest(this.state.sessionId);this.state.goal=snapshot.session.goal??this.state.goal;this.state.quest=quest;this.state.roadmap=snapshot.roadmap;this.state.messages=snapshot.messages??[];this.state.fallbacks=[...new Set([...this.state.fallbacks,...(quest.fallbacks??[]),...(quest.professor_result?.degraded?['Professor 回复曾降级为示例']:[])])];this.changed();}
+ async sync(){if(!this.state.sessionId)return;let snapshot;try{snapshot=await this.client.getSession(this.state.sessionId);this.state.sessionMissing=false;}catch(error){this.state.sessionMissing=error.status===404;if(error.status===404){this.state.sessionMissing=true;throw Error('服务器上已找不到这段会话。本机保存的目标、任务和对话仍在，可从本地备份恢复项目。');}throw error;}const quest=await this.client.getQuest(this.state.sessionId);this.state.goal=snapshot.session.goal??this.state.goal;this.state.quest=quest;this.state.roadmap=snapshot.roadmap;this.state.messages=snapshot.messages??[];this.state.fallbacks=[...new Set([...this.state.fallbacks,...(quest.fallbacks??[]),...(quest.professor_result?.degraded?['Professor 回复曾降级为示例']:[])])];this.changed();}
  async run(fn){if(this.busy)return false;this.busy=true;this.error='';this.stream='';this.changed();try{this.mode=await this.health();await fn();return true;}catch(e){this.error=e.name==='TimeoutError'||e.name==='AbortError'?'请求已中断。请先恢复服务端进度，再决定是否重试。':e.message;try{await this.sync();}catch{}return false;}finally{this.busy=false;this.status='';this.changed();}}
  recover(){return this.run(async()=>{await this.sync();});}
+ restoreMissingSession(){return this.run(async()=>{
+  if(!this.state.sessionMissing)return this.sync();
+  // Recheck: a temporary outage must not replace a session that still exists.
+  try{await this.sync();return;}catch(error){if(!this.state.sessionMissing)throw error;}
+  const s=this.state,q=s.quest;s.restoreId??=crypto.randomUUID().replaceAll('-','');this.changed();
+  const restored=await this.client.restoreSession({restore_id:s.restoreId,goal:s.goal,nickname:this.profile?.nickname,status:q.status,roadmap:s.roadmap,messages:s.messages.filter(m=>['user','assistant'].includes(m.role)).slice(-100).map(({role,content,agent})=>({role,content,agent})),library_result:q.library_result,professor_result:q.professor_result,lab_result:q.lab_result,project:q.project,fallbacks:s.fallbacks.slice(-30)});
+  s.sessionId=restored.session_id;s.sessionMissing=false;s.request=null;s.restoredFromBackup=true;this.changed();await this.sync();
+ });}
  handlers(){return {
   onToken:delta=>{this.stream+=delta;this.changed();},
   onStatus:status=>{this.status=status;this.changed();},
@@ -73,7 +82,7 @@ export class ConnectedSession{
  visit(space){return this.run(async()=>{
   await this.sync();
   if(space==='library'&&this.state.quest.status==='library')await this.advance();
-  else if(space==='library'&&this.state.roadmap&&this.state.quest.library_result?.retrieval_version!==3)await this.retrieveLibrary();
+  else if(space==='library'&&this.state.roadmap&&this.state.quest.library_result?.retrieval_version!==4)await this.retrieveLibrary();
   if(space==='office'&&this.state.quest.status==='professor'&&!this.state.quest.professor_result?.answer?.trim())await this.professor('请结合我的目标和图书馆资料，帮我收敛一个可验证的项目问题，并提出一个我需要回答的关键问题。');
  });}
  async retrieveLibrary(){await this.client.libraryRetrieve({session_id:this.state.sessionId,query:''});await this.sync();}

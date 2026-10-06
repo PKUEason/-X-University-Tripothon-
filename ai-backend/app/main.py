@@ -117,8 +117,9 @@ app.add_middleware(
     # 「回显任意 Origin + 允许携带凭据」，等于对全网开放。本服务不用 Cookie 鉴权，
     # 因此通配来源时关掉凭据；配置了具体来源才开启。
     allow_credentials=not settings.cors_allow_all,
-    # 全部端点只有 GET / POST（见 api/routes.py），无需放开 PUT / DELETE / PATCH。
-    allow_methods=["GET", "POST"],
+    # 端点使用 GET / POST / DELETE（见 api/routes.py：DELETE 用于删除会话/项目）。
+    # 不放开 PUT / PATCH。
+    allow_methods=["GET", "POST", "DELETE"],
     allow_headers=["*"],
 )
 

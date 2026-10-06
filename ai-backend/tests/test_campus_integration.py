@@ -4,6 +4,10 @@ from app.memory.store import store
 from app.memory.artifacts import save_artifact, read_artifact
 
 
+def _local(result):
+    return [r for r in result["results"] if r["source"] == "local"]
+
+
 def test_retry_replays_without_advancing_again():
     sid=store.create_session(goal='测试')
     store.update_state(sid,quest_status='professor')
@@ -48,7 +52,7 @@ def test_stage_handoffs_restore_with_project(client,session):
     list(orchestrator.advance(session))
     list(orchestrator.advance(session))
     quest=client.get('/api/quest/'+session).json()
-    assert quest['library_result']['documents']
+    assert quest['library_result']['results']
     assert quest['professor_result']['answer']
     assert quest['lab_result']['steps']
     assert quest['project']['artifact_type']=='project_plan'
@@ -153,9 +157,9 @@ def test_topic_filter_removes_wrong_nearest_neighbours(monkeypatch,live_mode):
     monkeypatch.setattr(librarian._hybrid,'search',lambda *a,**kw:[{'title':d['title'],'url':d['url'],'type':d['type'],'snippet':d['content']} for d in LIBRARY_CORPUS])
     soft=librarian.retrieve('工科基础，每天一个小时，柔性机器人小项目')
     diffusion=librarian.retrieve('文生图 DDPM')
-    assert len(soft['documents'])==3
-    assert not ({d['url'] for d in soft['documents']} & {d['url'] for d in diffusion['documents']})
-    assert librarian.retrieve('菠萝种植')['documents']==[]
+    assert len(_local(soft))==3
+    assert not ({d['url'] for d in _local(soft)} & {d['url'] for d in _local(diffusion)})
+    assert _local(librarian.retrieve('菠萝种植'))==[]
 
 
 def test_library_refresh_uses_own_goal_and_followups_without_advancing(client):
@@ -163,11 +167,11 @@ def test_library_refresh_uses_own_goal_and_followups_without_advancing(client):
     store.update_state(sid,quest_status='professor')
     store.add_message(sid,'user','选择 SOFA 仿真，周期一个月',agent='scholar')
     other=store.create_session(goal='扩散模型文生图')
-    save_artifact(other,'library_result',{'documents':[{'title':'other-project'}]})
+    save_artifact(other,'library_result',{'results':[{'title':'other-project','source':'local','type':'doc','url':'','snippet':''}]})
     result=client.post('/api/library/retrieve',json={'session_id':sid,'query':''}).json()
     assert 'SOFA' in result['query']
-    assert result['retrieval_version']==3
-    assert len(result['documents'])==3
+    assert result['retrieval_version']==4
+    assert len(_local(result))==3
     assert read_artifact(sid,'library_result')==result
-    assert read_artifact(other,'library_result')['documents'][0]['title']=='other-project'
+    assert read_artifact(other,'library_result')['results'][0]['title']=='other-project'
     assert orchestrator.get_quest(sid)['status']=='professor'

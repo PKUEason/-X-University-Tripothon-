@@ -45,7 +45,7 @@ python scripts/smoke_test.py
   里会同时躺着两套客户端，排查问题时极易搞混（而且 `starlette.testclient` 检测到只有 `httpx` 时会发告警）。
 - **`requirements.txt` 写 `>=x,<y` 而不是 `==`**：上界只用来挡跨大版本的静默漂移。
   曾经只写 `openai>=1.50`，实际被解析成 `3.14.1`（跨两个大版本）。要完全可复现的环境（路演当天、换机器）
-  请用 `requirements.lock.txt`，它是「204 项 pytest + 17 项冒烟全绿」的那套精确版本。
+  请用 `requirements.lock.txt`，它是「256 项 pytest + 17 项冒烟全绿」的那套精确版本。
 
 ## 2. 环境变量（.env）
 
@@ -70,6 +70,14 @@ python scripts/smoke_test.py
 | `EMBEDDING_API_KEY` | Embedding 服务的 key（**不复用** DeepSeek key） | 空 |
 | `EMBEDDING_MODEL` | API embedding 模型（硅基流动免费 `BAAI/bge-m3`） | `BAAI/bge-m3` |
 | `EMBEDDING_LOCAL_MODEL` | fastembed 本地模型 | `BAAI/bge-small-zh-v1.5` |
+| `ARXIV_ENABLED` | arXiv 实时论文检索开关（Library 论文区） | `true` |
+| `ARXIV_TIMEOUT` | arXiv 请求超时（秒） | `8.0` |
+| `ARXIV_TOP_K` | arXiv 返回论文数（1–10） | `3` |
+| `WEB_SEARCH_ENABLED` | 联网搜索开关（Library 联网区） | `true` |
+| `WEB_SEARCH_PROVIDER` | 联网搜索后端：`auto` / `bing`（免费无 key）/ `tavily`（需 key）/ `mock` | `auto` |
+| `WEB_SEARCH_TIMEOUT` | 联网搜索超时（秒） | `10.0` |
+| `WEB_SEARCH_MAX_RESULTS` | 联网搜索返回条数（1–20） | `6` |
+| `TAVILY_API_KEY` | Tavily key（仅 `WEB_SEARCH_PROVIDER=tavily` 时需要） | 空 |
 
 > 演示建议：平时 `MOCK_MODE=false` 联调真实效果；路演当天若网络不稳，改 `MOCK_MODE=true`，走完全确定的黄金路径。
 
@@ -265,34 +273,35 @@ SSE 说明：响应为 `text/event-stream`，每条消息含 `event:` 与 `data:
 
 ### 3.3 Library
 
-**POST `/library/retrieve`** — 资料检索（普通 JSON）
+**POST `/library/retrieve`** — 统一检索（普通 JSON）：一个搜索框，Agent 自动从本地资料 + arXiv + 联网三路搜索，合并去重后返回单一 `results` 列表。
 ```json
 { "session_id": "...", "query": "DDPM 扩散模型论文", "top_k": 5 }
 ```
 ```json
 {
-  "documents": [{ "title": "...", "type": "paper", "url": "https://arxiv.org/…", "snippet": "……" }],
-  "engine": "hybrid-v2(bm25+api:BAAI/bge-m3)",
-  "notice": "按当前项目主题筛选的本地资料；arXiv 论文独立检索。",
   "query": "我想学习扩散模型",
   "coverage": ["diffusion"],
-  "retrieval_version": 3,
-  "arxiv_query": "diffusion models",
-  "arxiv_papers": [
-    { "title": "Denoising Diffusion Probabilistic Models",
-      "authors": ["Jonathan Ho", "Ajay Jain", "Pieter Abbeel"],
-      "year": "2020", "url": "https://arxiv.org/abs/2006.11239",
-      "snippet": "We present high quality image synthesis results using diffusion probabilistic models…" }
+  "retrieval_version": 4,
+  "engine": "hybrid-v2(bm25+api:BAAI/bge-m3)",
+  "notice": "按当前项目主题筛选的本地资料；arXiv 与联网搜索独立检索。",
+  "results": [
+    { "title": "DDPM 论文导读", "type": "paper", "url": "https://…", "snippet": "……", "source": "local" },
+    { "title": "Denoising Diffusion Probabilistic Models", "type": "paper", "url": "https://arxiv.org/abs/2006.11239",
+      "snippet": "We present high quality image synthesis…", "source": "arxiv", "authors": ["Jonathan Ho"], "year": "2020" },
+    { "title": "十分钟读懂Diffusion：图解Diffusion扩散模型", "type": "webpage",
+      "url": "https://zhuanlan.zhihu.com/p/599887666", "snippet": "整个生成过程……", "source": "web" }
   ],
-  "arxiv_status": "ok"
+  "sources": { "local": "ok", "arxiv": "ok", "web": "ok" },
+  "arxiv_query": "diffusion models"
 }
 ```
-`arxiv_papers` / `arxiv_status` 用于分区展示；校园前端已接入，旧客户端需要渲染新增字段才能看到论文：
-- `arxiv_status`：`ok`（空列表表示无命中）、`failed`（网络或接口异常）、`disabled`（配置未启用）、`mock`（演示模式未联网）、`needs_query`（需补充英文检索词）。
-- arXiv 失败不影响本地结果；本地未覆盖的项目也独立搜索 arXiv，不回填其他项目的扩散模型资料。
-- 可选输入 `arxiv_query` 只调整论文检索词，不改变项目目标；默认从当前项目需求生成有限的主题关键词，返回实际检索词供核对。
-- MOCK 模式不返回预制论文冒充真实搜索；Professor 暂时仍只引用本地资料。
-- 结果按项目保存，`retrieval_version=3` 支持旧资料刷新。详见 [校园前端](../campus-frontend/README.md)。
+`results` 是统一列表，每条标注 `source`（`local` / `arxiv` / `web`），前端无需分区展示：
+- `sources` 记录每路状态：`ok`（空列表表示无命中）、`failed`、`disabled`、`mock`、`needs_query`。
+- 三路独立降级：任何一路失败不阻塞其他路；失败时 `notice` 追加提示。
+- 可选输入 `arxiv_query` 只调整论文检索词，不改变项目目标。
+- MOCK 模式不返回预制论文/网页冒充真实搜索；Professor 暂时仍只引用本地资料。
+- 联网搜索默认 Bing RSS（免费无 key，国内直连）；`WEB_SEARCH_PROVIDER=auto`/`bing`/`tavily`（需 key）/`mock`。
+- 结果按项目保存，`retrieval_version=4`。3D 校园前端在团队仓库 `XUniversity-Tripothon/campus-frontend/`（与本仓库同级管理），前端需按统一 `results` 列表渲染（按 `source` 区分本地/arXiv/联网）。
 
 engine 取值：`curated-v1`（MOCK/兜底）、`bm25-v1`（纯关键词 / 向量降级）、
 `vector-v2(<后端>)`、`hybrid-v2(bm25+<后端>)`；`<后端>` 如 `api:BAAI/bge-m3` /
@@ -382,7 +391,7 @@ while (true) {
 ```bash
 # 1. 单元 + 契约 + 降级（pytest，全量 MOCK 模式，无需启动服务）
 pip install -r requirements-dev.txt
-pytest                      # 204 项
+pytest                      # 256 项
 
 # 2. 端到端冒烟（需先 python run.py 起服务；会真实调用 DeepSeek）
 python scripts/smoke_test.py
@@ -397,12 +406,16 @@ python scripts/smoke_test.py
 | `tests/test_store.py` | SQLite 会话 / 消息 / 路线图 / 任务状态读写 |
 | `tests/test_api_contract.py` | 8 个端点的状态码、SSE 事件序列、响应结构 |
 | `tests/test_fallback.py` | 断网 / 超时 / 余额不足 / JSON 残缺时的降级路径（**演示保险，重点回归**） |
-| `tests/test_librarian.py` | Library 检索契约：mock→curated、真实→hybrid、零命中回退 |
+| `tests/test_librarian.py` | Library 统一检索契约：mock→curated、真实→hybrid、三路合并去重、arXiv/web 降级 |
+| `tests/test_arxiv.py` | arXiv 实时检索：XML 解析、缓存、中英关键词映射、librarian 集成与失败降级 |
+| `tests/test_web_search.py` | 联网搜索：Bing RSS 解析、Tavily、mock、auto 路由、失败降级 |
 | `tests/test_rag.py` | BM25 分词（词表/2-gram/停用词）、标题加权、排序与 snippet |
 | `tests/test_vector_rag.py` | embedding 后端/工厂、向量缓存持久化、RRF 融合、hybrid 三模式与失败降级 |
 | `tests/test_memory.py` | 记忆 CRUD、全局记忆、画像提取、长对话摘要、卡点记录 |
 | `tests/test_professor_rag.py` | Professor references 事件、相关性、卡点入记忆 |
 | `tests/test_orchestrator.py` | Quest 状态机完整走查、Project Card 契约、SSE 端点 |
+| `tests/test_campus_integration.py` | 3D 校园与 Agent 联调：阶段切换、项目隔离、Library 刷新、Topic 过滤 |
+| `tests/test_project_delete.py` | 项目删除保护：删除会话时清理 artifacts |
 | `tests/test_hardening.py` | CORS 收敛、API Token 开关、监听地址、lifespan 生命周期 |
 | `tests/test_guard.py` | 每日预算熔断（含并发不超支）、单 IP 限流、对外错误脱敏 |
 
@@ -430,10 +443,13 @@ XUniversity/
 │   │   ├── scholar.py         # Scholar：澄清 + 路线图（含 JSON 规范化/降级）
 │   │   ├── professor.py       # AI Professor 答疑（RAG 注入 + references）
 │   │   ├── lab_mentor.py      # Lab 实践指导
-│   │   ├── librarian.py       # Library 检索（Hybrid RAG + curated 兜底）
+│   │   ├── librarian.py       # Library 检索（Hybrid RAG + arXiv + 联网搜索，三路独立降级）
 │   │   └── orchestrator.py    # 多 Agent 编排：Quest 状态机 + Project Card
+│   ├── services/
+│   │   └── web_search.py      # 联网搜索：Bing RSS（默认免费）/ Tavily（可选）/ mock，可插拔
 │   ├── rag/
 │   │   ├── corpus.py          # Library 文档库（含正文，按段切块）
+│   │   ├── arxiv.py           # arXiv 实时检索：XML 解析、缓存、中英关键词映射
 │   │   ├── retriever.py       # 零依赖 BM25（中文词表 + 2-gram，英文切词）
 │   │   ├── embeddings.py      # Embedding 后端：API / fastembed / 哈希兜底（可插拔）
 │   │   ├── vector_index.py    # 向量索引：SQLite 缓存 + 余弦检索
@@ -444,8 +460,10 @@ XUniversity/
 │   │   └── guard.py           # 成本防护：每日预算熔断 / 单 IP 限流 / 错误脱敏
 │   ├── memory/
 │   │   ├── store.py           # SQLite：会话/消息/路线图/记忆/摘要/向量缓存
-│   │   └── memory_service.py  # 画像提取 / 会话摘要 / 记忆上下文
+│   │   ├── memory_service.py  # 画像提取 / 会话摘要 / 记忆上下文
+│   │   └── artifacts.py       # 按会话保存/读取结构化产物（library_result / professor_result / lab_result）
 │   └── mock_data/golden_path.py  # 黄金路径预制数据（扩散模型主题）
+├── frontend/                  # 独立 xuni-client 前端（TypeScript，见 frontend/README.md）
 ├── tests/                     # pytest：单元 / 契约 / 降级（MOCK 模式，不联网）
 │   ├── conftest.py            # 环境隔离基座 + 公共 fixture
 │   ├── test_json_utils.py
@@ -454,13 +472,19 @@ XUniversity/
 │   ├── test_api_contract.py
 │   ├── test_fallback.py
 │   ├── test_librarian.py
+│   ├── test_arxiv.py
+│   ├── test_web_search.py
 │   ├── test_rag.py
+│   ├── test_vector_rag.py
 │   ├── test_memory.py
 │   ├── test_professor_rag.py
 │   ├── test_orchestrator.py
+│   ├── test_campus_integration.py
+│   ├── test_project_delete.py
 │   ├── test_hardening.py
-│   ├── test_guard.py
-│   └── test_vector_rag.py
+│   └── test_guard.py
+├── docs-vector-rag.html       # Vector RAG 架构信息图
+├── docs-phase2-delivery.html  # 第二阶段交付架构信息图
 ├── pytest.ini
 ├── requirements-dev.txt       # 开发/测试依赖
 ├── requirements-rag.txt       # 可选：fastembed 本地 embedding（离线语义检索）

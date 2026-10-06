@@ -3,7 +3,8 @@
 这两处是最容易出隐蔽 bug 的地方——标记可能被 chunk 切断，
 模型输出的路线图可能缺 id / space / 乱序，一旦漏了前端 3D 场景就渲染不出来。
 """
-from app.agents.scholar import _MarkerFilter, _normalize_roadmap
+from app.agents.scholar import _MarkerFilter, _normalize_roadmap, _search_background
+from app.config import settings
 
 
 # ---------------- _MarkerFilter ----------------
@@ -55,12 +56,28 @@ def test_double_angle_brackets_that_are_not_the_marker():
     assert out == text
 
 
-def test_ready_defaults_to_false_when_stream_truncated():
-    """流被截断在 `<<<` 处，不应误判为 ready。"""
+def test_ready_stays_none_when_marker_truncated_halfway():
+    """流被截断在 `<<<`（半个前缀），ready 保持 None，让上层 _heuristic_ready 兜底。"""
     f = _MarkerFilter()
     f.feed("好的。<<<")
     assert f.flush() == ""
-    assert f.ready is False
+    assert f.ready is None
+
+
+def test_ready_parsed_when_marker_value_truncated():
+    """流被截断在 `<<<READY:true`（已写 MARKER 但缺 >>>），flush 时解析出 true。"""
+    f = _MarkerFilter()
+    f.feed("好的。<<<READY:true")
+    assert f.flush() == ""
+    assert f.ready is True
+
+
+def test_ready_stays_none_when_marker_value_empty():
+    """流被截断在 `<<<READY:`（已写 MARKER 但没写值），保持 None 不瞎猜。"""
+    f = _MarkerFilter()
+    f.feed("好的。<<<READY:")
+    assert f.flush() == ""
+    assert f.ready is None
 
 
 # ---------------- _normalize_roadmap ----------------
@@ -192,3 +209,67 @@ def test_normalize_output_is_always_contract_valid():
         assert rm.stages[0].space == "gate", f"输入 {case} 的首阶段不是 gate"
         ids = [t.id for s in rm.stages for t in s.tasks]
         assert len(ids) == len(set(ids)), f"输入 {case} 产生了重复任务 id：{ids}"
+
+
+# ---------------- _search_background（联网背景搜索） ----------------
+def test_search_background_returns_empty_in_mock_mode(monkeypatch):
+    monkeypatch.setattr(settings, "mock_mode", True)
+    monkeypatch.setattr(settings, "web_search_enabled", True)
+    assert _search_background("diffusion model") == ""
+
+
+def test_search_background_returns_empty_when_disabled(monkeypatch):
+    monkeypatch.setattr(settings, "mock_mode", False)
+    monkeypatch.setattr(settings, "web_search_enabled", False)
+    assert _search_background("diffusion model") == ""
+
+
+def test_search_background_formats_results(monkeypatch):
+    monkeypatch.setattr(settings, "mock_mode", False)
+    monkeypatch.setattr(settings, "web_search_enabled", True)
+    fake = [
+        {"title": "Diffusion Models Explained", "content": "A gentle intro to diffusion."},
+        {"title": "DDPM Paper", "content": "Denoising diffusion probabilistic models."},
+    ]
+    monkeypatch.setattr(
+        "app.agents.scholar.web_search.search",
+        lambda q, max_results=8: (fake, "bingrss"),
+    )
+    out = _search_background("diffusion", max_results=3)
+    assert "Diffusion Models Explained" in out
+    assert "A gentle intro to diffusion." in out
+    assert "DDPM Paper" in out
+    # 每条以 "- " 开头
+    assert all(line.startswith("- ") for line in out.split("\n") if line)
+
+
+def test_search_background_swallows_errors(monkeypatch):
+    """搜索 provider 抛异常时返回空串，不阻塞澄清流程。"""
+    monkeypatch.setattr(settings, "mock_mode", False)
+    monkeypatch.setattr(settings, "web_search_enabled", True)
+    def boom(q, max_results=8):
+        raise RuntimeError("network down")
+    monkeypatch.setattr("app.agents.scholar.web_search.search", boom)
+    assert _search_background("anything") == ""
+
+
+def test_search_background_empty_results(monkeypatch):
+    monkeypatch.setattr(settings, "mock_mode", False)
+    monkeypatch.setattr(settings, "web_search_enabled", True)
+    monkeypatch.setattr(
+        "app.agents.scholar.web_search.search",
+        lambda q, max_results=8: ([], "bingrss"),
+    )
+    assert _search_background("xyzzy nonexistent") == ""
+
+
+def test_search_background_rejects_mock_provider(monkeypatch):
+    """联网失败降级到 mock 语料时，必须返回空串，不能把扩散模型写死内容当真实背景。"""
+    monkeypatch.setattr(settings, "mock_mode", False)
+    monkeypatch.setattr(settings, "web_search_enabled", True)
+    mock_corpus = [{"title": "HuggingFace Diffusers", "content": "扩散模型推理库"}]
+    monkeypatch.setattr(
+        "app.agents.scholar.web_search.search",
+        lambda q, max_results=8: (mock_corpus, "mock"),
+    )
+    assert _search_background("柔性机器人入门") == ""

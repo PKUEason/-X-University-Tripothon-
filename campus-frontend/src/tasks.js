@@ -1,3 +1,4 @@
+import {updateTaskWithFeedback} from './task-feedback.js';
 import {renderRichText} from './rich-text.js';
 export function taskProgress(roadmap){
  const tasks=(roadmap?.stages??[]).flatMap(stage=>(stage.tasks??[]).map(task=>({...task,stage_id:stage.id,stage_name:stage.name,space:task.space??stage.space})));
@@ -19,9 +20,9 @@ export function renderTaskOverview({document,session}){
   if(!stage.tasks?.length)continue;
   const section=document.createElement('section'),heading=document.createElement('h3');renderRichText(heading,stage.name,{inline:true});section.append(heading);
   for(const task of stage.tasks){
-   const label=document.createElement('label');label.className='task overview-task';
+   const label=document.createElement('label');label.className='task overview-task'+(task.status==='done'?' task-done':'');
    const input=document.createElement('input');input.type='checkbox';input.checked=task.status==='done';input.disabled=session.busy;input.dataset.taskId=task.id;
-   input.onchange=async()=>{await session.completeTask(task.id,input.checked);renderTaskOverview({document,session});};
+   input.onchange=()=>updateTaskWithFeedback({document,session,id:task.id,done:input.checked});
    const text=document.createElement('span'),title=document.createElement('strong');renderRichText(title,task.title,{inline:true});const state=document.createElement('small');state.textContent=task.status==='done'?'已勾选完成':task.status==='in_progress'?'进行中':'待完成';text.append(title,state);
    if(task.deliverable){const deliverable=document.createElement('span');deliverable.className='task-deliverable';renderRichText(deliverable,'完成标准：'+task.deliverable,{inline:true});text.append(deliverable);}
    label.append(input,text);section.append(label);

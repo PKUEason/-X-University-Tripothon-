@@ -1,0 +1,40 @@
+{
+  "source": "tripo_convert_bf831ade-940a-4e82-aa05-2d125f0ac6b5.fbx",
+  "height_m": 1.78,
+  "bind_sole_correction_degrees": {
+    "L": 1.1894793224607432,
+    "R": -29.29348340421508
+  },
+  "sole_correction_degrees": {
+    "L": 0.039179211952434866,
+    "R": -0.8217551248544882
+  },
+  "mesh_triangles": 19168,
+  "bones": 17,
+  "clips": [
+    {
+      "name": "Idle",
+      "frames": [
+        0.0,
+        180.0
+      ]
+    },
+    {
+      "name": "Run",
+      "frames": [
+        0.0,
+        32.0
+      ]
+    },
+    {
+      "name": "Walk",
+      "frames": [
+        0.0,
+        40.0
+      ]
+    }
+  ],
+  "max_influences": 4,
+  "glb_bytes": 3953528,
+  "note": "New authored rig and in-place motion; not the unavailable Tripo animation."
+}

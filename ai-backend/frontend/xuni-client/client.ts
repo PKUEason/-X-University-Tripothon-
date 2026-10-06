@@ -81,6 +81,10 @@ export class XUniversityClient {
     });
   }
 
+  async restoreSession(input: Record<string, unknown>): Promise<{session_id: string}> {
+    return this.request("/session/restore", {method: "POST", body: JSON.stringify(input)});
+  }
+
   /** 会话快照：goal / state / roadmap / 全部消息，用于恢复 3D 场景状态 */
   async getSession(sessionId: string): Promise<SessionSnapshot> {
     return this.request<SessionSnapshot>(`/session/${encodeURIComponent(sessionId)}`);

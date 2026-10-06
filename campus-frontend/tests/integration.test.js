@@ -33,7 +33,7 @@ test('switching projects isolates artifacts, drafts and stage; profile survives 
  s.newProject('文生图');const second=s.state.projectId;assert.equal(s.state.sessionId,null);assert.equal(s.state.quest.status,'created');assert.deepEqual(s.state.messages,[]);
  s.state.sessionId='B';s.state.quest={status:'library',library_result:{documents:[{title:'B资料'}]}};s.persist();
  s.switchProject(first);assert.equal(s.state.sessionId,'A');assert.equal(s.state.quest.status,'lab');assert.equal(s.state.draftMessage,'还没发送的问题');assert.equal(s.state.quest.library_result,undefined);
- const restored=new ConnectedSession({storage});assert.deepEqual(restored.profile,{nickname:'小禾',gender:'female'});assert.equal(restored.state.projectId,first);assert.equal(restored.projects.length,2);restored.switchProject(second);assert.equal(restored.state.sessionId,'B');assert.equal(restored.state.quest.professor_result,undefined);
+ const restored=new ConnectedSession({storage});assert.deepEqual(restored.profile,{nickname:'小禾',gender:'female',role:'learner'});assert.equal(restored.state.projectId,first);assert.equal(restored.projects.length,2);restored.switchProject(second);assert.equal(restored.state.sessionId,'B');assert.equal(restored.state.quest.professor_result,undefined);
 });
 test('profile is validated and nickname goes to new backend sessions',async()=>{
  const f=fixture();assert.throws(()=>f.session.setProfile({nickname:'  ',gender:'male'}));assert.throws(()=>f.session.setProfile({nickname:'小林',gender:'invalid'}));
@@ -66,4 +66,29 @@ test('delete final unsent project works offline and empty workspace survives leg
 });
 test('failed or concurrent deletion preserves project and prevents switching',async()=>{
  const f=fixture();const a=f.session.state.projectId;f.session.state.sessionId='A';f.session.newProject('B');const b=f.session.state.projectId;let reject;f.client.deleteSession=()=>new Promise((_,r)=>{reject=r;});const pending=f.session.deleteProject(a);assert.equal(f.session.switchProject(a),false);assert.equal(f.session.newProject('C'),false);assert.equal(await f.session.deleteProject(b),false);reject(Error('offline'));assert.equal(await pending,false);assert.equal(f.session.projects.length,2);assert.equal(f.session.state.projectId,b);assert.match(f.session.error,/删除失败/);
+});
+
+
+test('campus identity migrates old profiles and survives switching, editing and reload',()=>{
+ const storage=memory(),s=new ConnectedSession({storage});s.setProfile({nickname:'小禾',gender:'female'});
+ const old=JSON.parse(storage.getItem(STORAGE_KEY));delete old.profile.role;storage.setItem(STORAGE_KEY,JSON.stringify(old));
+ const migrated=new ConnectedSession({storage});assert.equal(migrated.profile.role,'learner');const original=migrated.state.projectId;
+ for(const role of ['learner','tutor','builder']){
+  migrated.setProfile({nickname:'小禾',gender:'female',role});migrated.newProject(role);migrated.switchProject(original);
+  const reloaded=new ConnectedSession({storage});assert.equal(reloaded.profile.role,role);assert.equal(reloaded.profile.gender,'female');
+  reloaded.setProfile({nickname:'新昵称',gender:'male'});assert.equal(reloaded.profile.role,role);
+ }
+ assert.throws(()=>migrated.setProfile({nickname:'小禾',gender:'female',role:'admin'}),/请选择/);
+});
+
+test('missing server session preserves the local snapshot and explicitly restores without AI generation',async()=>{
+ const f=fixture();f.session.state.sessionId='lost';f.session.state.goal='保留目标';f.session.state.quest={status:'professor',library_result:{retrieval_version:4,results:[]}};f.session.state.roadmap={stages:[{tasks:[{id:'a',status:'done'}]}]};f.session.state.messages=[{role:'user',agent:'scholar',content:'保留对话'}];
+ const snapshot=structuredClone(f.session.state);let restored;
+ f.client.getSession=async id=>{if(id==='lost')throw Object.assign(Error('missing'),{status:404});return {session:{goal:'保留目标'},roadmap:snapshot.roadmap,messages:snapshot.messages};};
+ f.client.restoreSession=async body=>{restored=body;return {session_id:'restored'};};f.client.getQuest=async()=>snapshot.quest;
+ assert.equal(await f.session.recover(),false);assert.match(f.session.error,/本地备份/);assert.deepEqual(f.session.state.roadmap,snapshot.roadmap);assert.equal(await f.session.restoreMissingSession(),true);assert.equal(f.session.state.sessionId,'restored');assert.equal(restored.roadmap.stages[0].tasks[0].status,'done');assert.equal(restored.messages[0].content,'保留对话');assert.equal(f.getCalls(),0);
+});
+
+test('network outage never triggers snapshot restoration or loses cached progress',async()=>{
+ const f=fixture();f.session.state.sessionId='offline';f.session.state.sessionMissing=true;f.session.state.quest={status:'lab'};let restores=0;f.client.getSession=async()=>{throw Error('network offline');};f.client.restoreSession=async()=>{restores++;};assert.equal(await f.session.restoreMissingSession(),false);assert.equal(restores,0);assert.equal(f.session.state.quest.status,'lab');assert.equal(f.session.state.sessionId,'offline');
 });

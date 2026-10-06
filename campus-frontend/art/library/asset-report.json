@@ -1,0 +1,15 @@
+{
+  "generator": "Blender 4.5.9 LTS",
+  "asset": "library-refined.glb",
+  "bytes": 11857260,
+  "triangles": 215904,
+  "drawMeshes": 17,
+  "dimensionsMetres": [
+    21.1,
+    27.72,
+    27.3
+  ],
+  "origin": "centre of library, Y-up; place at 0,0,-25",
+  "source": "art/library/libpedia.blend",
+  "build": "art/library/build_library.py"
+}

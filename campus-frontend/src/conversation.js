@@ -86,6 +86,6 @@ export function createConversationUI({document,session,getSpace}){
  $('#message').oninput=()=>{session.state[keyFor(getSpace())]=$('#message').value;session.persist();$('#send-reply').disabled=session.busy||!$('#message').value.trim();};
  $('#goal-form').onsubmit=e=>{e.preventDefault();return send('goal');};
  $('#chat-form').onsubmit=e=>{e.preventDefault();return send('reply');};
- $('#message').onkeydown=e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)&&!e.isComposing){e.preventDefault();$('#chat-form').requestSubmit();}};
+ for(const [input,form] of [['#goal','#goal-form'],['#message','#chat-form']])$(input).onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&e.keyCode!==229){e.preventDefault();if(!e.repeat&&!session.busy)$(form).requestSubmit();}};
  return {render,restore,scrollLatest};
 }

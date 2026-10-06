@@ -9,13 +9,13 @@ export const spaces = {
 export const spaceAt = (x,z)=>Math.abs(x+15)<3.65&&z<4.7&&z>-4.65?'office':Math.abs(x-15)<3.65&&z<4.7&&z>-4.65?'lab':z < -12 && Math.abs(x) < 9.72 ? 'library' : z < 10 ? 'plaza' : 'gate';
 export const collisionBoxes = [
  {x:-6,z:0,w:.85,d:.85,h:2.3},
- {x:-6,z:8,w:.8,d:.12,h:2.2},
  ...[-8,8].map(x=>({x,z:3,w:1,d:.5,h:1.2})),
- ...[-8,8].flatMap(x=>[16,7,-8].map(z=>({x,z,w:.18,d:.18,h:2.8}))),
+ ...[-8,8].flatMap(x=>[16,7,-8].map(z=>({x,z,w:.75,d:.75,h:4.8}))),
  ...[-16,16].map(x=>({x,z:-2.7,w:1.5,d:.625,h:1.65})),
  {x:-5,z:12,w:1,d:1,h:6},{x:5,z:12,w:1,d:1,h:6},
  {x:-10,z:-25,w:.25,d:13,h:6},{x:10,z:-25,w:.25,d:13,h:6},{x:0,z:-38,w:10,d:.25,h:6},
  {x:-6.6,z:-12,w:3.4,d:.25,h:6},{x:6.6,z:-12,w:3.4,d:.25,h:6},
+ ...[-17,-22,-29,-35].flatMap(z=>[4.2,7.8].map(x=>({x,z:z+1.8,w:.35,d:.4,h:1.2}))),
  ...[-20,-27,-34].flatMap(z=>[{x:-6,z,w:2.6,d:.7,h:3.2},{x:6,z,w:2.6,d:1,h:1}]),
  ...[-15,15].flatMap(x=>[{x:x-4,z:0,w:.2,d:5,h:7},{x:x+4,z:0,w:.2,d:5,h:7},{x,z:-5,w:4,d:.2,h:7},{x:x-2.8,z:5,w:1.2,d:.2,h:7},{x:x+2.8,z:5,w:1.2,d:.2,h:7}])
 ];
@@ -51,6 +51,8 @@ export function routeTo(position,target){
 }
 export const assetSlots = [
  {id:'gate-shell',spaceId:'gate',format:'glb',url:null,position:[0,0,12],rotationY:0,scale:1,placeholder:true},
+ {id:'office-shell',spaceId:'office',format:'glb',url:null,position:[-15,0,0],rotationY:0,scale:1,placeholder:true},
+ {id:'lab-shell',spaceId:'lab',format:'glb',url:null,position:[15,0,0],rotationY:0,scale:1,placeholder:true},
  {id:'library-shell',spaceId:'library',format:'glb',url:null,position:[0,0,-25],rotationY:0,scale:1,placeholder:true},
  {id:'plaza-landmark',spaceId:'plaza',format:'glb',url:null,position:[-7,0,3],rotationY:0,scale:1,placeholder:true}
 ];

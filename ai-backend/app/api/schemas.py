@@ -68,7 +68,7 @@ class RetrieveRequest(BaseModel):
     arxiv_query: Optional[str] = Field(default=None, max_length=200)
     stage_id: Optional[str] = None
     task_id: Optional[str] = None
-    top_k: int = 5
+    top_k: int = Field(default=5, ge=1, le=20, description="返回资料条数，1-20")
 
 
 class LabRequest(BaseModel):
@@ -100,3 +100,24 @@ class QuestAdvanceRequest(BaseModel):
     message: Optional[str] = None
     request_id: Optional[str] = Field(default=None, max_length=80)
     expected_status: Optional[str] = None
+
+
+class RestoredMessage(BaseModel):
+    role: Literal['user', 'assistant']
+    content: str = Field(max_length=30000)
+    agent: Literal['scholar', 'professor', 'librarian', 'lab_mentor', 'orchestrator'] | None = None
+
+
+class SessionRestore(BaseModel):
+    # A client-generated UUID makes retries idempotent without reusing a lost session ID.
+    restore_id: str = Field(pattern=r'^[a-f0-9]{32}$')
+    goal: str = Field(max_length=10000)
+    nickname: str | None = Field(default=None, max_length=24)
+    status: Literal['created', 'clarifying', 'quest_ready', 'library', 'professor', 'lab', 'project_ready']
+    roadmap: Roadmap | None = None
+    messages: list[RestoredMessage] = Field(default_factory=list, max_length=100)
+    library_result: dict | None = None
+    professor_result: dict | None = None
+    lab_result: dict | None = None
+    project: dict | None = None
+    fallbacks: list[str] = Field(default_factory=list, max_length=30)

@@ -25,7 +25,7 @@ REF_TOP_K = 3
 
 
 def _chunk(text: str, size: int = 12) -> Iterator[str]:
-    yield from (text[i : i + 12] for i in range(0, len(text), size))
+    yield from (text[i : i + size] for i in range(0, len(text), size))
 
 
 def _current_task(roadmap: Optional[dict], task_id: Optional[str]):

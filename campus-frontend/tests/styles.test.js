@@ -4,7 +4,7 @@ import {readFile} from 'node:fs/promises';
 import {Window} from 'happy-dom';
 import {validateStyles} from '../scripts/validate-styles.mjs';
 
-const css=await readFile(new URL('../style.css',import.meta.url),'utf8');
+const css=(await readFile(new URL('../style.css',import.meta.url),'utf8'))+'\n'+(await readFile(new URL('../glass.css',import.meta.url),'utf8'));
 const html=(await readFile(new URL('../index.html',import.meta.url),'utf8')).replace(/<script\b[^>]*>[\s\S]*?<\/script>/g,'').replace(/<link\b[^>]*>/g,'');
 
 test('stylesheet parses and accidental JavaScript overwrite fails validation',async()=>{
@@ -27,8 +27,8 @@ for(const width of [1440,390])test(`actual stylesheet retains campus layout and 
   assert.equal(computed('header').position,'absolute');
   assert.equal(computed('#project-list').display,'grid');
   assert.equal(computed('#project-list').gridTemplateColumns.replace(/\s/g,''),width===390?'1fr':'repeat(2,minmax(0,1fr))');
-  assert.equal(computed('#projects-panel').backgroundColor,'#f1f0e4');
-  assert.equal(computed('#projects-panel').borderRadius,'14px');
+  assert.match(computed('#projects-panel').backgroundImage,/linear-gradient/);
+  assert.equal(computed('#projects-panel').borderRadius,width===390?'20px':'24px');
   assert.equal(computed('.project-option.selected').borderTopWidth,'2px');
   $('#agent-panel').setAttribute('open','');$('#chat-form').hidden=false;
   assert.equal(computed('#agent-panel').display,'flex');

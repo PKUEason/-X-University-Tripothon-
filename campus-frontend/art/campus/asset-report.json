@@ -1,0 +1,41 @@
+[
+  {
+    "asset": "professor-refined.glb",
+    "bytes": 7227484,
+    "triangles": 120544,
+    "drawMeshes": 14,
+    "authoredObjects": 394,
+    "position": [
+      -15,
+      0,
+      0
+    ],
+    "source": "art/campus/professor.blend"
+  },
+  {
+    "asset": "lab-refined.glb",
+    "bytes": 5843776,
+    "triangles": 96984,
+    "drawMeshes": 13,
+    "authoredObjects": 466,
+    "position": [
+      15,
+      0,
+      0
+    ],
+    "source": "art/campus/lab.blend"
+  },
+  {
+    "asset": "gate-refined.glb",
+    "bytes": 2951124,
+    "triangles": 71224,
+    "drawMeshes": 9,
+    "authoredObjects": 92,
+    "position": [
+      0,
+      0,
+      12
+    ],
+    "source": "art/campus/gate.blend"
+  }
+]

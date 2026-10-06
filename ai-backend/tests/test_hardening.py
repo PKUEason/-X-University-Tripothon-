@@ -39,28 +39,29 @@ def test_cors_wildcard_drops_credentials(client):
     assert "access-control-allow-credentials" not in r.headers
 
 
-def test_cors_methods_limited_to_get_post(client):
+def test_cors_methods_limited_to_get_post_delete(client):
     r = client.options(
         "/api/session/create",
         headers={"Origin": EVIL, "Access-Control-Request-Method": "POST"},
     )
     allow = r.headers.get("access-control-allow-methods", "")
     assert "POST" in allow
-    for verb in ("DELETE", "PUT", "PATCH"):
+    assert "DELETE" in allow  # 删除会话/项目需要
+    for verb in ("PUT", "PATCH"):
         assert verb not in allow
 
 
 def test_cors_rejects_disallowed_method(client):
     r = client.options(
         "/api/session/create",
-        headers={"Origin": EVIL, "Access-Control-Request-Method": "DELETE"},
+        headers={"Origin": EVIL, "Access-Control-Request-Method": "PUT"},
     )
     assert r.status_code == 400
 
 
 def test_cors_middleware_config_is_introspectable():
     kwargs = _cors_kwargs()
-    assert kwargs["allow_methods"] == ["GET", "POST"]
+    assert kwargs["allow_methods"] == ["GET", "POST", "DELETE"]
     # 默认 CORS_ORIGINS=*，凭据必须是关的
     assert kwargs["allow_credentials"] is False
 

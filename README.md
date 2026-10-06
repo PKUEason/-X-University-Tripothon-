@@ -2,6 +2,8 @@
 
 🌌 X University：走进一座未来大学，提出目标，让 AI 带着你学习、研究、协作，直到做出成果。
 
+**线上体验：[X University](https://x-university-demo.onrender.com/)**（使用项目已有体验口令）。2026-10-06 的校园视觉、真实场景入口、交互修复与 Library v4 已上线；[本轮交付与验证记录](campus-frontend/docs/RELEASE-2026-10-06.md)。
+
 ## 目录结构
 
 ```

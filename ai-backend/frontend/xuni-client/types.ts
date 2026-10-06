@@ -145,7 +145,9 @@ export interface LibraryRetrieveResult {
   arxiv_status?: 'ok' | 'failed' | 'disabled' | 'mock' | 'needs_query';
   arxiv_query?: string;
   arxiv_papers?: {title: string; authors: string[]; year: string; url: string; snippet: string}[];
-  documents: LibraryDocument[];
+  documents?: LibraryDocument[];
+  results?: {title: string; url: string; snippet: string; source: string; type: string; authors?: string[]; year?: string}[];
+  sources?: Record<string, string>;
   engine: string;
   notice: string;
 }

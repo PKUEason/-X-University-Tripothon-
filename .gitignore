@@ -13,5 +13,12 @@ campus-frontend/.local/
 
 campus-frontend/src/markdown-vendor.js
 
+# Local verification, session data, and Blender autosave backups.
+.local/
+.pytest_cache/
+*.blend1
+ai-backend/data/**/*.db
+ai-backend/data/**/*.db-journal
+
 # Retired sample character; the campus uses procedural student avatars.
 campus-frontend/public/assets/Soldier.glb

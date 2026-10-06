@@ -1,6 +1,6 @@
 # X University · 3D Campus + Agent
 
-基于原有 Three.js Alpha 场景，连接团队 FastAPI 后端与其 `XUniversityClient`。当前包含完整校园前端，并整合团队 arXiv 检索提交 `0b5c1fd`；无需依赖仓库外的 Alpha 文件。
+按设计师 Figma 方向重建的霓虹浮岛校园，保留 Three.js 实时渲染，连接团队 FastAPI 后端与其 `XUniversityClient`。当前包含完整校园前端，并整合团队 arXiv 检索提交 `0b5c1fd`；无需依赖仓库外的 Alpha 文件。
 
 ## 启动
 
@@ -28,7 +28,7 @@ macOS 的系统 Python 3.9 不满足后端要求，请用自己安装的 Python 
 3. 顶部“我的项目”和左侧当前项目名称都能打开项目列表，显示每个项目的阶段与实际任务完成数量。
 4. 切换项目只切换工作内容，人物留在当前空间；点击任务卡可走向该项目下一站。输入草稿也分别保留。
 5. Student 资料跨项目共用；点击顶部昵称修改角色与昵称。新建后端会话会携带昵称，角色性别只用于本地人物外观。
-6. 刷新后先看到项目选择，保留资料与上次选中的项目。Agent 正在回复时暂时禁用切换/新建，防止串写。
+6. 刷新后先看到大世界主页，保留资料与上次选中的项目。Agent 正在回复时暂时禁用切换/新建，防止串写。
 
 项目列表、角色、昵称和草稿保存在当前浏览器，各项目的对话/阶段结果保存在本机后端。当前没有账号登录和跨设备项目同步。
 
@@ -41,7 +41,9 @@ macOS 的系统 Python 3.9 不满足后端要求，请用自己安装的 Python 
 - `src/service.js`：会话控制、SDK 调用、流式回调、故障恢复。
 - `src/app.js`：空间与 Agent 面板、任务/资料/项目卡展示。
 - `src/student.js`：原创学生模型、预览与程序化行走动画。
-- `src/campus.js` / `world.js`：复用原场景，打开 Office/Lab 的通行与交互。
+- `src/campus.js` / `world.js`：碰撞、当前位置寻路、第一/第三人称与总览镜头。
+- `src/neon-scene.js` / `atmosphere.js`：浮岛建筑、城市天际线、日夜环境、材质与辉光。
+- `src/shell.js` / `glass.css`：主页、玻璃导航、环形菜单与响应式视觉。
 - `server.mjs`：白名单静态资源 + 同源 API 代理，不服务 `.env`、源码仓库或数据库。
 - `build.mjs`：从团队 TypeScript SDK 编译浏览器模块，不复制一套手写 API 协议。
 - [接入说明](docs/INTEGRATION.md)：后端增量、状态映射与边界。
@@ -53,7 +55,13 @@ npm --prefix campus-frontend run build
 ai-backend/.venv/bin/python -m pytest ai-backend/tests -q
 ```
 
-校园建筑仍沿用占位场景，学生人物为原创程序模型；Three.js 与其他素材来源见 `public/credits.html`。本次未调用任何场景生成工具或消耗生成额度。
+校园建筑已替换为原创程序化霓虹浮岛，学生人物仍为程序模型，未达到参考图中的精修角色资产质量。首页使用设计师 Figma 中的原始背景图片和 SVG 图标；可行走世界为实时三维几何。素材说明见 `public/credits.html`，本轮设计映射与验收边界见 [视觉重建记录](docs/VISUAL-REDESIGN.md)。
+
+## 视觉与视角
+
+底部切换主页、总览、第三人称和第一人称。WASD / 方向键移动，Shift 奔跑，拖动环视，第三人称滚轮调节距离，E 互动。M 打开环形目的地菜单；点击目的地从人物当前位置导航。夜间按钮改变实时场景灯光，不改变主页的原始背景图。
+
+设置提供三档画质及减少动态效果。流畅模式关闭阴影和辉光。默认画质合并静态几何并实例化周围城市。首页及资料卡使用真实 DOM 文本，Agent Markdown 继续经过允许列表转换。
 
 ## 独立后台运行（2026-10-03）
 
@@ -74,3 +82,13 @@ ai-backend/.venv/bin/python -m pytest ai-backend/tests -q
 ### 内容卡片与 Markdown
 
 Agent 面板将项目背景、最新回复、待回答问题、下一步操作和实际任务分区展示，旧消息可展开。正文通过 Marked 分词后渲染为安全 DOM；运行 `npm run sdk` 时同时生成 `src/markdown-vendor.js`。仅格式化和分组展示，不修改服务端消息。问题识别使用有限规则，未匹配的问题保留在正文。Markdown 中的任务复选符号仅表示原文内容，实际任务进度仍由单独的任务控件操作。
+
+### 图书馆 Blender 样板
+
+底部 **图书馆样板** 可直接查看新建筑的全貌、正面、侧面和阅读大厅。拖动旋转，滚轮缩放；“走进图书馆”从角色当前位置继续寻路。该视图与校园使用同一个 GLB，切换观察视角不会移动角色。
+
+源模型、可复现建模脚本及范围说明见 [art/library/README.md](art/library/README.md)。本轮只精修图书馆；上层楼梯为视觉结构，步行仍限一层。
+
+### Campus architecture update
+
+Professor, X Lab and X Gate now use authored Blender models in the same material family as Libpedia. Open **建筑细节** and choose a building for exterior/interior inspection. Sources and reproducible exports: [`art/campus/README.md`](art/campus/README.md). Ground-floor navigation and Agent interaction locations are retained.
