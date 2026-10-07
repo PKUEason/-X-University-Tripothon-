@@ -7,9 +7,11 @@ from fastapi import APIRouter, HTTPException
 from sse_starlette.sse import EventSourceResponse
 from starlette.concurrency import iterate_in_threadpool
 
-from app.agents import lab_mentor, librarian, orchestrator, professor, scholar
+from app.agents import lab_mentor, librarian, orchestrator, professor, scholar, explorer
 from app.api.schemas import (
     ClarifyRequest,
+    ExplorerChatRequest,
+    ExplorerInteractRequest,
     LabRequest,
     MemoryRememberRequest,
     ProgressRequest,
@@ -33,7 +35,11 @@ _INTERNAL_MEMORY_KEYS = frozenset({"library_result", "professor_result", "lab_re
 
 
 def _is_internal_memory_key(key: str) -> bool:
-    return key in _INTERNAL_MEMORY_KEYS or key.startswith("request:")
+    return (
+        key in _INTERNAL_MEMORY_KEYS
+        or key.startswith("request:")
+        or key.startswith("artifact:")
+    )
 
 
 @contextmanager
@@ -210,3 +216,18 @@ def delete_session(session_id: str):
         store.delete_session(session_id)
         orchestrator.cleanup_session_locks(session_id)
     return {"ok": True}
+
+
+# ---------------- Explorer Agent：物品交互 ----------------
+@router.post("/explorer/interact")
+def explorer_interact(body: ExplorerInteractRequest):
+    _require_session(body.session_id)
+    artifact = body.artifact.model_dump()
+    return _sse(explorer.interact(body.session_id, artifact), body.session_id)
+
+
+@router.post("/explorer/chat")
+def explorer_chat(body: ExplorerChatRequest):
+    _require_session(body.session_id)
+    artifact = body.artifact.model_dump() if body.artifact else None
+    return _sse(explorer.stream_chat(body.session_id, body.message, artifact), body.session_id)

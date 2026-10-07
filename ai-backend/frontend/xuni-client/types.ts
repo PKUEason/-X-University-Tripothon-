@@ -13,8 +13,8 @@ export type Space = "gate" | "library" | "professor_office" | "lab";
 /** 任务状态：由 /session/{id}/progress 更新，驱动场景中任务点亮/解锁 */
 export type TaskStatus = "pending" | "in_progress" | "done";
 
-/** 资料类型 */
-export type ResourceType = "paper" | "article" | "video" | "course" | "tool";
+/** 资料类型（v4 统一检索结果的 type 字段） */
+export type ResourceType = "paper" | "article" | "video" | "course" | "book" | "tool";
 
 // ---------------- 路线图领域模型 ----------------
 
@@ -131,23 +131,44 @@ export interface LabInput extends SessionOnlyInput {
 
 // ---------------- 非 SSE 响应体 ----------------
 
-export interface LibraryDocument {
+/** v4 统一检索结果条目（local / arxiv / web / course / book 合并后的统一格式） */
+export interface LibraryResultItem {
   title: string;
-  type: ResourceType;
   url: string;
   snippet: string;
+  /** 来源渠道：local=本地语料, arxiv=arXiv, web=联网搜索, course=课程视频, book=书籍, resource=资源推荐兜底 */
+  source: "local" | "arxiv" | "web" | "course" | "book" | "resource";
+  /** 资料类型 */
+  type?: ResourceType;
+  /** arxiv 论文特有 */
+  authors?: string[];
+  year?: string;
+  /** 其他扩展字段 */
+  [key: string]: unknown;
 }
 
+/** 各检索渠道的状态 */
+export interface LibrarySources {
+  local?: "ok" | "disabled" | "empty";
+  arxiv?: "ok" | "failed" | "disabled" | "mock" | "needs_query";
+  web?: "ok" | "failed" | "disabled" | "mock";
+  resource?: "ok" | "disabled" | "mock" | "failed" | "needs_query";
+  [key: string]: unknown;
+}
+
+/** POST /library/retrieve 响应（v4 契约） */
 export interface LibraryRetrieveResult {
-  query?: string;
-  retrieval_version?: number;
+  query: string;
+  retrieval_version: 4;
   coverage?: string[];
-  arxiv_status?: 'ok' | 'failed' | 'disabled' | 'mock' | 'needs_query';
+  engine?: string;
+  notice?: string;
+  /** 统一结果列表（所有渠道合并，按 url 去重） */
+  results: LibraryResultItem[];
+  /** 各渠道状态 */
+  sources: LibrarySources;
+  /** 实际使用的 arXiv 查询词（可能为空） */
   arxiv_query?: string;
-  arxiv_papers?: {title: string; authors: string[]; year: string; url: string; snippet: string}[];
-  documents: LibraryDocument[];
-  engine: string;
-  notice: string;
 }
 
 export interface LabGuidanceResult {
@@ -346,4 +367,75 @@ export interface MemoryRememberInput {
   kind?: MemoryKind;
   key: string;
   content: string;
+}
+
+// ---------------- Explorer Agent：物品交互 ----------------
+
+/** 3D 校园物品信息（前端点击物品时传入） */
+export interface ArtifactInfo {
+  artifact_id: string;
+  name: string;
+  tag?: string;
+  category?: string;
+  location?: string;
+  description?: string;
+}
+
+export interface ExplorerInteractInput {
+  session_id: string;
+  artifact: ArtifactInfo;
+}
+
+export interface ExplorerChatInput {
+  session_id: string;
+  message: string;
+  artifact?: ArtifactInfo;
+}
+
+/** Explorer 物品交互 SSE 事件 */
+export type ExplorerInteractEvent =
+  | SseEnvelope<"status", { type: "status"; stage: string }>
+  | SseEnvelope<"artifact_info", { type: "artifact_info"; artifact: ArtifactInfo }>
+  | SseEnvelope<"token", { type: "token"; delta: string }>
+  | SseEnvelope<"questions", { type: "questions"; questions: string[] }>
+  | SseEnvelope<"fallback", { type: "fallback"; reason: string }>
+  | SseEnvelope<"error", { type: "error"; message: string }>
+  | SseEnvelope<"done", { type: "done" }>;
+
+/** Explorer 对话 SSE 事件 */
+export type ExplorerChatEvent =
+  | SseEnvelope<"status", { type: "status"; stage: string }>
+  | SseEnvelope<"token", { type: "token"; delta: string }>
+  | SseEnvelope<"fallback", { type: "fallback"; reason: string }>
+  | SseEnvelope<"error", { type: "error"; message: string }>
+  | SseEnvelope<"done", { type: "done" }>;
+
+export interface ExplorerInteractResult {
+  text: string;
+  questions: string[];
+  artifact: ArtifactInfo | null;
+  fallback: boolean;
+  error?: string;
+}
+
+export interface ExplorerChatResult {
+  text: string;
+  fallback: boolean;
+  error?: string;
+}
+
+export interface ExplorerInteractHandlers {
+  onStatus?: (stage: string) => void;
+  onArtifactInfo?: (artifact: ArtifactInfo) => void;
+  onToken?: (delta: string) => void;
+  onQuestions?: (questions: string[]) => void;
+  onFallback?: (reason: string) => void;
+  onError?: (message: string) => void;
+}
+
+export interface ExplorerChatHandlers {
+  onStatus?: (stage: string) => void;
+  onToken?: (delta: string) => void;
+  onFallback?: (reason: string) => void;
+  onError?: (message: string) => void;
 }

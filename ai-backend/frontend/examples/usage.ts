@@ -35,9 +35,10 @@ async function goldenPathDemo(): Promise<void> {
   console.log("路线图:", roadmap.title);
   console.log("阶段:", roadmap.stages.map((s) => `${s.space}:${s.tasks.length}任务`).join(" -> "));
 
-  // 4. Library：检索资料
+  // 4. Library：检索资料（v4 统一结果：results + sources）
   const lib = await xuni.libraryRetrieve({ session_id, query: "DDPM 扩散模型论文", top_k: 3 });
-  console.log("图书馆资料:", lib.documents.map((d) => d.title));
+  console.log("图书馆资料:", lib.results.map((d) => `[${d.source}] ${d.title}`));
+  console.log("检索渠道:", JSON.stringify(lib.sources));
 
   // 5. Professor Office：答疑（携带任务上下文）
   let professorText = "";

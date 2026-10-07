@@ -45,7 +45,7 @@ python scripts/smoke_test.py
   里会同时躺着两套客户端，排查问题时极易搞混（而且 `starlette.testclient` 检测到只有 `httpx` 时会发告警）。
 - **`requirements.txt` 写 `>=x,<y` 而不是 `==`**：上界只用来挡跨大版本的静默漂移。
   曾经只写 `openai>=1.50`，实际被解析成 `3.14.1`（跨两个大版本）。要完全可复现的环境（路演当天、换机器）
-  请用 `requirements.lock.txt`，它是「256 项 pytest + 17 项冒烟全绿」的那套精确版本。
+  请用 `requirements.lock.txt`，它是「289 项 pytest + 17 项冒烟全绿」的那套精确版本。
 
 ## 2. 环境变量（.env）
 
@@ -391,7 +391,7 @@ while (true) {
 ```bash
 # 1. 单元 + 契约 + 降级（pytest，全量 MOCK 模式，无需启动服务）
 pip install -r requirements-dev.txt
-pytest                      # 256 项
+pytest                      # 289 项
 
 # 2. 端到端冒烟（需先 python run.py 起服务；会真实调用 DeepSeek）
 python scripts/smoke_test.py
@@ -406,7 +406,9 @@ python scripts/smoke_test.py
 | `tests/test_store.py` | SQLite 会话 / 消息 / 路线图 / 任务状态读写 |
 | `tests/test_api_contract.py` | 8 个端点的状态码、SSE 事件序列、响应结构 |
 | `tests/test_fallback.py` | 断网 / 超时 / 余额不足 / JSON 残缺时的降级路径（**演示保险，重点回归**） |
-| `tests/test_librarian.py` | Library 统一检索契约：mock→curated、真实→hybrid、三路合并去重、arXiv/web 降级 |
+| `tests/test_librarian.py` | Library 统一检索契约：mock→curated、真实→hybrid、四路合并去重（含资源推荐）、arXiv/web 降级 |
+| `tests/test_resource_scout.py` | 资源推荐：课程视频+书籍搜索、域名白名单过滤、去重、scout 统一入口、降级 |
+| `tests/test_explorer.py` | Explorer Agent：物品交互、玩家上下文收集、问题提取、联网背景搜索、SSE 事件、记忆存储 |
 | `tests/test_arxiv.py` | arXiv 实时检索：XML 解析、缓存、中英关键词映射、librarian 集成与失败降级 |
 | `tests/test_web_search.py` | 联网搜索：Bing RSS 解析、Tavily、mock、auto 路由、失败降级 |
 | `tests/test_rag.py` | BM25 分词（词表/2-gram/停用词）、标题加权、排序与 snippet |
@@ -443,10 +445,12 @@ XUniversity/
 │   │   ├── scholar.py         # Scholar：澄清 + 路线图（含 JSON 规范化/降级）
 │   │   ├── professor.py       # AI Professor 答疑（RAG 注入 + references）
 │   │   ├── lab_mentor.py      # Lab 实践指导
-│   │   ├── librarian.py       # Library 检索（Hybrid RAG + arXiv + 联网搜索，三路独立降级）
+│   │   ├── librarian.py       # Library 检索（Hybrid RAG + arXiv + 联网搜索 + 资源推荐，四路独立降级）
+│   │   ├── explorer.py        # Explorer Agent：3D 物品交互 + 好奇心激发
 │   │   └── orchestrator.py    # 多 Agent 编排：Quest 状态机 + Project Card
 │   ├── services/
-│   │   └── web_search.py      # 联网搜索：Bing RSS（默认免费）/ Tavily（可选）/ mock，可插拔
+│   │   ├── web_search.py      # 联网搜索：Bing RSS（默认免费）/ Tavily（可选）/ mock，可插拔
+│   │   └── resource_scout.py  # 资源推荐：课程视频 + 书籍搜索，教育类域名白名单
 │   ├── rag/
 │   │   ├── corpus.py          # Library 文档库（含正文，按段切块）
 │   │   ├── arxiv.py           # arXiv 实时检索：XML 解析、缓存、中英关键词映射
@@ -472,6 +476,8 @@ XUniversity/
 │   ├── test_api_contract.py
 │   ├── test_fallback.py
 │   ├── test_librarian.py
+│   ├── test_resource_scout.py
+│   ├── test_explorer.py
 │   ├── test_arxiv.py
 │   ├── test_web_search.py
 │   ├── test_rag.py

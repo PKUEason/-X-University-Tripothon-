@@ -100,3 +100,24 @@ class QuestAdvanceRequest(BaseModel):
     message: Optional[str] = None
     request_id: Optional[str] = Field(default=None, max_length=80)
     expected_status: Optional[str] = None
+
+
+# ---------- Explorer Agent：物品交互 ----------
+class ArtifactInfo(BaseModel):
+    artifact_id: str = Field(..., max_length=100)
+    name: str = Field(..., max_length=200)
+    tag: str = Field(default="", max_length=100)
+    category: str = Field(default="", max_length=100)
+    location: str = Field(default="", max_length=100)
+    description: str = Field(default="", max_length=500)
+
+
+class ExplorerInteractRequest(BaseModel):
+    session_id: str
+    artifact: ArtifactInfo
+
+
+class ExplorerChatRequest(BaseModel):
+    session_id: str
+    message: str
+    artifact: Optional[ArtifactInfo] = None

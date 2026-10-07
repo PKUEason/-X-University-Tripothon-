@@ -25,13 +25,16 @@ Three.js 场景(你)  ──XUniversityClient──▶  FastAPI 后端  ──�
 
 ### 0.1 向量 RAG 升级（第二阶段，前端零改动）
 
-Library 检索已从纯 BM25 升级为 **Hybrid = BM25 + 向量语义（RRF 融合）**：
-- `documents` 结构与字段完全不变，`engine` 字段新取值：
+Library 检索已从纯 BM25 升级为 **Hybrid = BM25 + 向量语义（RRF 融合）**，并统一为 v4 契约：
+- v4 返回 `results`（统一结果列表，所有渠道合并去重）+ `sources`（各渠道状态），**不再返回** `documents` / `arxiv_papers` / `arxiv_status`；
+- `results` 每条格式：`{title, url, snippet, source, type?}`，`source` 取值 `local` / `arxiv` / `web` / `course` / `book`；
+- `sources` 格式：`{local, arxiv, web, resource}`，每个值为 `ok` / `failed` / `disabled` / `mock` / `needs_query`；
+- `engine` 字段新取值：
   - `hybrid-v2(bm25+api:BAAI/bge-m3)` — 真语义混合检索（已配 embedding API）；
   - `hybrid-v2(bm25+hash-deterministic-256)` — 未配置后端时的兜底（管线可跑，但无语义增益）；
   - `bm25-v1` — 纯关键词（向量路故障自动降级，此时 `notice` 会说明原因）；
   - `curated-v1` — MOCK 模式 / 零命中兜底。
-- 前端只需把 `engine` / `notice` 当作调试信息（可不展示），**无需任何对接改动**。
+- 前端按 `source` 分组渲染（论文/文章/课程/书籍），`engine` / `notice` 当作调试信息（可不展示）。
 - 启用真语义（2 分钟，免费）：到 https://siliconflow.cn 注册（送额度）→ 控制台新建 API 密钥 →
   在后端 `.env` 填：
   ```
@@ -43,16 +46,16 @@ Library 检索已从纯 BM25 升级为 **Hybrid = BM25 + 向量语义（RRF 融�
   重启后端即可。不想注册也可本地离线方案：`pip install -r requirements-rag.txt` +
   `EMBEDDING_PROVIDER=fastembed`（首次自动下载约 100MB 模型）。
 
-### 0.2 arXiv 实时检索与校园接入
+### 0.2 统一检索 v4 与校园接入
 
-校园前端已展示本地资料与 arXiv 相关论文。接口新增字段兼容旧客户端，但旧客户端必须渲染新字段才能看到论文：
-- `arxiv_papers: [{title, authors, year, url, snippet}]`：相关论文，默认 3 篇。
-- `arxiv_status: "ok" | "failed" | "disabled" | "mock" | "needs_query"`：成功空列表表示无命中；失败不伪造资料。
-- `arxiv_query`：实际英文检索词；`POST /api/library/retrieve` 可以传入该字段手动调整，不改变项目目标。
-- `query`、`coverage`、`retrieval_version=3`：当前项目需求、本地覆盖范围和结果版本；旧缓存进入 Library 时刷新。
-- 本地资料按项目主题筛选，无命中时不回填无关扩散资料。外部论文检索独立执行；演示模式明确显示未联网，不返回预制论文冒充真实结果。
-- 真实模式使用 HTTPS，默认 8 秒请求超时；有限的中英主题映射和短语查询，其他中文主题要求补充英文关键词。Professor 暂不自动引用 arXiv 论文。
-- 校园启动与交接参见 [`../../campus-frontend/README.md`](../../campus-frontend/README.md)。
+校园前端展示 Library 统一检索结果。v4 契约将本地语料、arXiv 论文、联网搜索、资源推荐（课程/书籍）四路合并为单一 `results` 列表：
+- `results: [{title, url, snippet, source, type?}]`：统一结果，按 url 去重，`source` 区分渠道；
+- `sources: {local, arxiv, web, resource}`：各渠道状态，失败不伪造资料；
+- `arxiv_query`：实际英文检索词；`POST /api/library/retrieve` 可以传入该字段手动调整；
+- `query`、`coverage`、`retrieval_version=4`：当前项目需求、本地覆盖范围和结果版本；
+- 资源推荐（`source=course` / `book`）自动搜索教育类网站（B站/YouTube/Coursera/豆瓣读书等），域名白名单过滤；
+- 本地资料按项目主题筛选，无命中时不回填无关资料。外部检索独立执行；演示模式明确显示未联网，不返回预制内容冒充真实结果。
+- 真实模式使用 HTTPS，默认 8 秒请求超时；有限的中英主题映射和短语查询。Professor 暂不自动引用 arXiv 论文。
 
 ## 1. 空间 ↔ 接口映射
 

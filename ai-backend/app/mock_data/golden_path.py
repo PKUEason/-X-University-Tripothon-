@@ -426,3 +426,36 @@ def lab_guidance(task_title: Optional[str] = None) -> dict:
         ],
         "tools": ["Python 3.10+", "PyTorch", "HuggingFace diffusers", "transformers", "accelerate"],
     }
+
+
+# ---------------- Explorer：物品交互 ----------------
+def explorer_interact(artifact: dict) -> str:
+    name = artifact.get("name", "这个物品")
+    tag = artifact.get("tag", "")
+    return (
+        f"嘘……你发现了「{name}」。\n\n"
+        f"你知道吗？每一个看似普通的物品背后，都藏着一段被遗忘的故事。"
+        f"这个{tag}，可能见证过某个深夜的灵感，也可能被某个改变世界的人触摸过。\n\n"
+        f"那么——如果这个物品会说话，它会告诉你什么？\n"
+        f"如果把它放进你正在做的项目里，它会扮演什么角色？\n"
+        f"来，跟我说说你最近在折腾什么，也许这个物品里藏着你需要的答案。"
+    )
+
+
+def explorer_questions(artifact: dict) -> list[str]:
+    name = artifact.get("name", "这个物品")
+    return [
+        f"如果「{name}」会说话，它会告诉你什么？",
+        f"把它放进你的项目里，它会扮演什么角色？",
+        f"你最近在做的东西，和这个物品有什么意想不到的联系？",
+    ]
+
+
+def explorer_chat(message: str, artifact_context: dict | None = None) -> str:
+    name = artifact_context.get("name", "这个物品") if artifact_context else "这个物品"
+    return (
+        f"有意思！你提到的「{message[:30]}」让我想起了一些事情……\n\n"
+        f"你知道吗，很多伟大的发现都始于一个看似无关的物品。"
+        f"「{name}」可能就是你的那个起点。\n\n"
+        f"再跟我多说说——你觉得这个方向最让你兴奋的是什么？"
+    )

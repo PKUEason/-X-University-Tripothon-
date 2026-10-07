@@ -22,6 +22,14 @@ import type {
   ClarifyInput,
   ClarifyResult,
   CreateSessionInput,
+  ExplorerChatEvent,
+  ExplorerChatHandlers,
+  ExplorerChatInput,
+  ExplorerChatResult,
+  ExplorerInteractEvent,
+  ExplorerInteractHandlers,
+  ExplorerInteractInput,
+  ExplorerInteractResult,
   LabGuidanceResult,
   LabInput,
   LibraryRetrieveResult,
@@ -60,7 +68,7 @@ export class ApiError extends Error {
 }
 
 /** SSE 事件基类：后端 data 里一定有 type 字段 */
-type AnySseEvent = ClarifyEvent | RoadmapEvent | ProfessorEvent | QuestEvent;
+type AnySseEvent = ClarifyEvent | RoadmapEvent | ProfessorEvent | QuestEvent | ExplorerInteractEvent | ExplorerChatEvent;
 
 const DEFAULT_BASE = "http://127.0.0.1:8000/api";
 
@@ -288,6 +296,81 @@ export class XUniversityClient {
       method: "POST",
       body: JSON.stringify(input),
     });
+  }
+
+  // ============ Explorer Agent：物品交互（SSE 流式） ============
+
+  /**
+   * 点击 3D 校园物品时调用。探索者精灵结合物品信息 + 玩家项目背景，
+   * 生成好奇心问题/话题，流式输出。resolve 时机：收到 done 事件。
+   */
+  async streamExplorerInteract(
+    input: ExplorerInteractInput,
+    handlers: ExplorerInteractHandlers = {},
+    signal?: AbortSignal,
+  ): Promise<ExplorerInteractResult> {
+    const result: ExplorerInteractResult = { text: "", questions: [], artifact: null, fallback: false };
+    await this.streamPost<ExplorerInteractEvent>("/explorer/interact", input, (ev) => {
+      switch (ev.event) {
+        case "status":
+          handlers.onStatus?.(ev.data.stage);
+          break;
+        case "artifact_info":
+          result.artifact = ev.data.artifact;
+          handlers.onArtifactInfo?.(ev.data.artifact);
+          break;
+        case "token":
+          result.text += ev.data.delta;
+          handlers.onToken?.(ev.data.delta);
+          break;
+        case "questions":
+          result.questions = ev.data.questions;
+          handlers.onQuestions?.(ev.data.questions);
+          break;
+        case "fallback":
+          result.fallback = true;
+          handlers.onFallback?.(ev.data.reason);
+          break;
+        case "error":
+          result.error = ev.data.message;
+          handlers.onError?.(ev.data.message);
+          break;
+        case "done":
+          break;
+      }
+    }, signal);
+    return result;
+  }
+
+  /** 与探索者精灵继续对话（保持当前物品上下文） */
+  async streamExplorerChat(
+    input: ExplorerChatInput,
+    handlers: ExplorerChatHandlers = {},
+    signal?: AbortSignal,
+  ): Promise<ExplorerChatResult> {
+    const result: ExplorerChatResult = { text: "", fallback: false };
+    await this.streamPost<ExplorerChatEvent>("/explorer/chat", input, (ev) => {
+      switch (ev.event) {
+        case "status":
+          handlers.onStatus?.(ev.data.stage);
+          break;
+        case "token":
+          result.text += ev.data.delta;
+          handlers.onToken?.(ev.data.delta);
+          break;
+        case "fallback":
+          result.fallback = true;
+          handlers.onFallback?.(ev.data.reason);
+          break;
+        case "error":
+          result.error = ev.data.message;
+          handlers.onError?.(ev.data.message);
+          break;
+        case "done":
+          break;
+      }
+    }, signal);
+    return result;
   }
 
   // ============ 内部实现 ============
