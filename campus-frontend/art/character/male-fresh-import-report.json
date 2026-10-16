@@ -1,0 +1,70 @@
+[
+  {
+    "gender": "male",
+    "source": "tripo_convert_337953e8-8d94-4e0a-b2fe-d79beac050eb.fbx",
+    "source_sha256": "d522b4392165151633aa961dea7ae92a5622a8217b870b01fce88881e5682136",
+    "output": "student-male-zip.glb",
+    "output_sha256": "a4dfcfa51b43fa2dc45840b42179e5886d923923952a783df5a2f3ce521ccbfa",
+    "native_textures": true,
+    "height_m": 1.78,
+    "bones": 65,
+    "clips": [
+      {
+        "name": "Clap",
+        "duration": 13.666666666666666,
+        "speed": null
+      },
+      {
+        "name": "Dance",
+        "duration": 10.791666666666666,
+        "speed": null
+      },
+      {
+        "name": "Greet",
+        "duration": 3.5,
+        "speed": null
+      },
+      {
+        "name": "Run",
+        "duration": 1.25,
+        "speed": 2.8799867691982426
+      },
+      {
+        "name": "Walk",
+        "duration": 2.3333333333333335,
+        "speed": 0.7902333832933724
+      },
+      {
+        "name": "Idle",
+        "duration": 2,
+        "speed": null
+      }
+    ],
+    "bytes": 29244748,
+    "front": "+Z",
+    "note": "Supplied rig and animations; in-place root correction; Idle holds the greeting opening pose.",
+    "embedded_images": [
+      {
+        "image": "kid_character_3d_model_normal",
+        "mime": "image/jpeg",
+        "bytes": 3653776,
+        "sha256": "00b125f4996a606d993c04485826894f3b147cabdd0e9c30b26c3bce800ae206",
+        "exact_zip_file": "kid_character_3d_model_normal.JPEG"
+      },
+      {
+        "image": "kid_character_3d_model_basecolor",
+        "mime": "image/jpeg",
+        "bytes": 6061009,
+        "sha256": "4037a6ce0dd7acd0e1187fc11814d72ee33548075b440c7ff371b76e281bec0a",
+        "exact_zip_file": "kid_character_3d_model_basecolor.JPEG"
+      },
+      {
+        "image": "kid_character_3d_model_metallic-kid_character_3d_model_roughness",
+        "mime": "image/png",
+        "bytes": 17437370,
+        "sha256": "c589cc381e9ce772671ca04b0e4387a5bf1212bef737c645518dab722a244885",
+        "exact_zip_file": null
+      }
+    ]
+  }
+]

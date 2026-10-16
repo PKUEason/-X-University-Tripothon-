@@ -83,20 +83,34 @@ export function createProceduralStudent(profile={gender:'male'}){
 export function createStudent(profile={gender:'male'}, {loadAsset=loadCharacterAsset}={}){
  const root=new THREE.Group();root.name='campus-student';root.userData.identity=normalizeRole(profile.role);root.userData.assetStatus='loading';
  let current=createProceduralStudent(profile),disposed=false;root.add(current.root);
- const ready=(typeof document==='undefined'&&loadAsset===loadCharacterAsset?Promise.reject(new Error('No browser loader')):Promise.resolve().then(loadAsset)).then(asset=>{
+ const ready=(typeof document==='undefined'&&loadAsset===loadCharacterAsset?Promise.reject(new Error('No browser loader')):Promise.resolve().then(()=>loadAsset(profile.gender))).then(asset=>{
   if(disposed)return false;
   const next=instantiateCharacter(asset,profile.role);
   root.remove(current.root);current.dispose();current=next;root.add(current.root);root.userData.assetStatus='ready';return true;
  }).catch(()=>{if(!disposed)root.userData.assetStatus='fallback';return false;});
- return {root,ready,update(...args){if(!disposed){current.update(...args);root.userData.motion=current.root.userData.motion;}},dispose(){disposed=true;current.dispose();root.clear();}};
+ return {root,ready,get availableMotions(){return current.availableMotions||[];},playMotion(name){return !disposed&&(current.playMotion?.(name)??false);},update(...args){if(!disposed){current.update(...args);root.userData.motion=current.root.userData.motion;}},dispose(){disposed=true;current.dispose();root.clear();}};
 }
 
 export function createStudentPreview(container){
- const renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setSize(280,310);renderer.setClearColor(0,0);renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.05;container.append(renderer.domElement);renderer.domElement.setAttribute('aria-label','校园角色三维预览，可拖动查看挎包');
- const scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(32,280/310,.1,20);camera.position.set(1.7,1.5,-3.7);camera.lookAt(0,.95,0);scene.add(new THREE.HemisphereLight(0xf4f7ff,0x7c715d,2));const light=new THREE.DirectionalLight(0xffead4,2.5);light.position.set(-3,5,-4);scene.add(light);
+ const renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setSize(280,310);renderer.setClearColor(0,0);renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.05;container.append(renderer.domElement);renderer.domElement.setAttribute('aria-label','校园角色三维预览，可拖动旋转');
+ const motion=document.createElement('select');motion.setAttribute('aria-label','预览人物动作');container.after(motion);
+ const labels={Idle:'站立',Walk:'走路',Run:'跑步',Greet:'打招呼',Clap:'鼓掌',Dance:'跳舞'};
+ function syncMotions(character){motion.replaceChildren();motion.disabled=true;character.ready.then(ok=>{if(student!==character)return;for(const name of ['Idle','Walk','Run','Greet','Clap','Dance'].filter(n=>character.availableMotions.includes(n))){const option=document.createElement('option');option.value=name;option.textContent=labels[name]||name;motion.append(option);}motion.value='Idle';motion.disabled=!ok;});}
+ motion.onchange=()=>student.playMotion(motion.value);
+ const scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(32,280/310,.1,20);camera.position.set(1.7,1.5,-3.7);camera.lookAt(0,.95,0);scene.add(new THREE.HemisphereLight(0xf4f7ff,0x7c715d,.8));const light=new THREE.DirectionalLight(0xffead4,2.5);light.position.set(-3,5,-4);scene.add(light);
+ // The supplied metallic surfaces need surroundings to reflect. Keep the
+ // original materials and provide a neutral studio environment in the preview.
+ if(renderer.isWebGLRenderer){
+  const studio=new THREE.Scene();studio.background=new THREE.Color('#b8b4ad');
+  const panel=new THREE.Mesh(new THREE.PlaneGeometry(8,8),new THREE.MeshBasicMaterial({color:new THREE.Color(3,3,3),side:THREE.DoubleSide}));
+  panel.position.set(-3,5,-4);panel.lookAt(0,1,0);studio.add(panel);
+  const generator=new THREE.PMREMGenerator(renderer);
+  scene.environment=generator.fromScene(studio,.04).texture;scene.environmentIntensity=.6;
+  generator.dispose();panel.geometry.dispose();panel.material.dispose();
+ }
  const base=new THREE.Mesh(new THREE.CylinderGeometry(.43,.46,.05,48),new THREE.MeshStandardMaterial({color:'#bcd5ec',roughness:1}));base.position.y=-.025;scene.add(base);
- let student=createStudent(),last=performance.now(),drag=false,previousX=0;scene.add(student.root);student.root.rotation.y=-.3;
+ let student=createStudent(),last=performance.now(),drag=false,previousX=0;scene.add(student.root);student.root.rotation.y=-.3;syncMotions(student);
  renderer.domElement.onpointerdown=e=>{drag=true;previousX=e.clientX;renderer.domElement.setPointerCapture(e.pointerId);};renderer.domElement.onpointermove=e=>{if(drag){student.root.rotation.y+=(e.clientX-previousX)*.015;previousX=e.clientX;}};renderer.domElement.onpointerup=renderer.domElement.onpointercancel=()=>drag=false;
- function frame(now){requestAnimationFrame(frame);const dt=Math.min((now-last)/1000,.05);last=now;if(!container.closest('dialog')?.open)return;student.update(dt,false,false);renderer.render(scene,camera);}requestAnimationFrame(frame);
- return {setProfile(profile){const angle=student.root.rotation.y;scene.remove(student.root);student.dispose();student=createStudent(profile);student.root.rotation.y=angle;scene.add(student.root);}};
+ function frame(now){requestAnimationFrame(frame);const dt=Math.min((now-last)/1000,.05);last=now;if(!container.closest('dialog')?.open)return;const moving=['Walk','Run'].includes(motion.value);student.update(dt,moving,motion.value==='Run');renderer.render(scene,camera);}requestAnimationFrame(frame);
+ return {setProfile(profile){const angle=student.root.rotation.y;scene.remove(student.root);student.dispose();student=createStudent(profile);student.root.rotation.y=angle;scene.add(student.root);syncMotions(student);}};
 }

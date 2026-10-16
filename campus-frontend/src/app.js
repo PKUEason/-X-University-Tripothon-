@@ -61,6 +61,7 @@ async function openTasks(id=session.state.projectId){if(session.busy)return;if(!
 function openProjects(){world?.stop();renderProjects();openPanel('#projects-panel');}
 function openStudent(){const p=session.profile;$('#nickname').value=p?.nickname||'';document.querySelectorAll('[name="gender"]').forEach(r=>r.checked=r.value===p?.gender);document.querySelectorAll('[name="identity"]').forEach(r=>r.checked=r.value===(p?.role||'learner'));updateProfilePreview();$('#cancel-profile').hidden=!p;$('#enter-campus').textContent=p?'保存校园身份':'开始校园活动 →';preview?.setProfile(p||{gender:'male'});openPanel('#student-panel');}
 function render(){
+ const dance=$('#character-motion option[value="Dance"]');if(dance){dance.hidden=session.profile?.gender==='female';dance.disabled=dance.hidden;}
  const s=session.state,q=s.quest,status=q.status,pending=session.busy,target=nextSpace(status),step=progress[status]??0;
  const mode=session.mode?.mock_mode?'后端演示模式':s.fallbacks.length?'已连接 · 含降级示例':session.mode?'Agent 已连接':'正在连接 Agent';
  $('#student-button').textContent=session.profile?.nickname||'学生资料';$('#active-project-name').textContent=projectTitle(s)+' ▾';$('#panel-project').textContent='当前项目 · '+projectTitle(s);if($('#projects-panel').open)renderProjects();
@@ -142,7 +143,7 @@ $('#student-button').onclick=openStudent;
 $('#student-panel').oncancel=e=>{if(!session.profile)e.preventDefault();};
 $('#cancel-profile').onclick=()=>$('#student-panel').close();
 function updateProfilePreview(){const role=document.querySelector('[name="identity"]:checked')?.value||'learner';const gender=document.querySelector('[name="gender"]:checked')?.value||'male';const identity=paintIdentity($('#student-panel'),role);$('#preview-role').textContent=identity.label;preview?.setProfile({gender,role});}
-$('#student-form').onchange=updateProfilePreview;
+$('#student-form').onchange=e=>{if(e.target.matches('[name="gender"],[name="identity"]'))updateProfilePreview();};
 $('#student-form').onsubmit=e=>{e.preventDefault();const first=!session.profile;try{session.setProfile({nickname:$('#nickname').value,gender:document.querySelector('[name="gender"]:checked')?.value,role:document.querySelector('[name="identity"]:checked')?.value||'learner'});world?.setStudent(session.profile);$('#profile-error').textContent='';$('#student-panel').close();if(first)openProjects();}catch(error){$('#profile-error').textContent=error.message;}};
 $('#new-project-form').onsubmit=e=>{e.preventDefault();const title=$('#project-name').value.trim();if(!title||!session.newProject(title))return;$('#project-name').value='';restoreDrafts();$('#projects-panel').close();showAgent('gate');};
 $('#export-project').onclick=()=>{const blob=new Blob([JSON.stringify({goal:session.state.goal,artifact_type:'project_plan',project:session.state.quest.project,guidance:session.state.quest.lab_result,fallbacks:session.state.fallbacks,mock_mode:session.mode?.mock_mode},null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='x-university-project-card.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);};
@@ -155,3 +156,5 @@ render();
 if(new URL(location.href).searchParams.get('view')==='library')shell.setView('library');
 if(!session.profile)openStudent();
 void session.recover();
+
+$('#character-motion').onchange=e=>{const name=e.target.value;if(name&&!world?.playMotion(name))toast('人物动作尚未就绪，或当前形象没有这个动作。');e.target.value='';e.target.blur();};

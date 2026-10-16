@@ -1930,3 +1930,10 @@ body[data-cursor=scene] #world canvas { cursor:none; }
 .campus-start-note { display:block;margin-top:10px;padding-left:3px;font-size:10px;color:#b9d1e9;letter-spacing:.035em; }
 @media(max-width:1100px) { .welcome-card { padding:24px;min-height:280px;background-position:60% 50%; } .welcome-copy h2 { font-size:29px; } }
 @media(max-width:700px) { .welcome-card { padding:23px;min-height:290px;background-image:linear-gradient(90deg,#172d50ef,#223e63b3 65%,#304b7950),url('./assets/campus-home.jpg'); } .welcome-copy h2 { font-size:28px; } #explore-world.campus-start { min-height:54px;font-size:21px; } }
+
+/* Motion controls share the existing character and campus UI. */
+#student-preview + select { display:block; width:181px; margin:0 auto; }
+#character-motion { position:fixed; right:24px; bottom:82px; z-index:5; max-width:112px; padding:7px 10px; border:1px solid #ffffff45; border-radius:12px; background:#edf3fa; color:#26354c; font:inherit; font-size:12px; }
+
+body:not([data-view=third]) #character-motion, body[data-navigation=true] #character-motion { display:none; }
+@media(max-width:700px) { #character-motion { right:20px; bottom:28px; } }

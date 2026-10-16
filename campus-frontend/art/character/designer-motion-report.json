@@ -1,0 +1,79 @@
+[
+  {
+    "gender": "male",
+    "source": "tripo_convert_337953e8-8d94-4e0a-b2fe-d79beac050eb.fbx",
+    "height_m": 1.78,
+    "bones": 65,
+    "clips": [
+      {
+        "name": "Clap",
+        "duration": 13.666666666666666,
+        "speed": null
+      },
+      {
+        "name": "Dance",
+        "duration": 10.791666666666666,
+        "speed": null
+      },
+      {
+        "name": "Greet",
+        "duration": 3.5,
+        "speed": null
+      },
+      {
+        "name": "Run",
+        "duration": 1.25,
+        "speed": 2.8799867691982426
+      },
+      {
+        "name": "Walk",
+        "duration": 2.3333333333333335,
+        "speed": 0.7902333832933724
+      },
+      {
+        "name": "Idle",
+        "duration": 2,
+        "speed": null
+      }
+    ],
+    "bytes": 3383628,
+    "front": "+Z",
+    "note": "Supplied rig and animations; in-place root correction; Idle holds the greeting opening pose."
+  },
+  {
+    "gender": "female",
+    "source": "tripo_convert_a04d0240-e904-4fab-9b9e-045c170dede3.fbx",
+    "height_m": 1.78,
+    "bones": 65,
+    "clips": [
+      {
+        "name": "Clap",
+        "duration": 13.666666666666666,
+        "speed": null
+      },
+      {
+        "name": "Greet",
+        "duration": 3.5,
+        "speed": null
+      },
+      {
+        "name": "Run",
+        "duration": 1.25,
+        "speed": 3.2042722585912236
+      },
+      {
+        "name": "Walk",
+        "duration": 2.3333333333333335,
+        "speed": 0.8792133355121808
+      },
+      {
+        "name": "Idle",
+        "duration": 2,
+        "speed": null
+      }
+    ],
+    "bytes": 3061520,
+    "front": "+Z",
+    "note": "Supplied rig and animations; in-place root correction; Idle holds the greeting opening pose."
+  }
+]
